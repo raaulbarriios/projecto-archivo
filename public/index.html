@@ -7,6 +7,8 @@
     <!-- Google Fonts for typography -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <!-- SheetJS for browser-based Excel parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <div class="background-elements">
@@ -36,25 +38,48 @@
             </div>
             
             <div class="status-bar">
-                <span id="resultCount" class="result-count">Escriba para empezar a buscar.</span>
-                <button id="refreshBtn" class="refresh-btn">
+                <span id="resultCount" class="result-count">Iniciando base de datos...</span>
+                
+                <label for="fileInput" id="uploadLabel" class="refresh-btn" style="cursor: pointer;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
-                    Actualizar Excels
-                </button>
+                    Añadir Excels
+                </label>
+                <input type="file" id="fileInput" multiple accept=".xlsx, .xls" style="display: none;">
             </div>
         </section>
 
         <section class="results-section" id="resultsContainer">
             <!-- Los resultados aparecerán aquí -->
             <div class="empty-state" id="emptyState">
-                <div class="empty-icon"></div>
-                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.</p>
+                <div class="empty-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <p>Las coincidencias se mostrarán aquí.<br>Arrastra archivos Excel o usa el botón para añadirlos manualmente si no cargan solos.</p>
             </div>
         </section>
     </main>
+
+    <div id="dropZone" class="drop-zone hidden">
+        <div class="drop-zone-content">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <h2>Suelta los archivos Excel aquí</h2>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
