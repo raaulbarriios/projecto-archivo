@@ -1,0 +1,26 @@
+Flag;Nombre;Qué significa;Columna1;"Paso 1:
+Cliente ? SYN
+""Hello, client""";
+SYN;Synchronize;Iniciar conexión;;;
+ACK;Acknowledgment;Confirmar recepción;;;
+FIN;Finish;Cierre normal;;;
+RST;Reset;Cierre abrupto  puede que el firewall lo corte, servicio caido, escaneo detectado o puerto cerrado;;"Paso 2:
+Servidor ? SYN-ACK
+""Hello, server""";
+PSH;Push;Enviar datos inmediatamente;;;
+URG;Urgent;Datos urgentes;;;
+;;;;;
+Muchos SYN repetidos posible escaneo o problema;;;;"Paso 3:
+Cliente ? ACK
+""comversación""";
+;;;;;
+;;;;;
+"Sequence Number = número del byte que envío
+Ack Number = número del siguiente byte que espero
+
+Ejemplo simple:
+Cliente manda 100 bytes empezando en seq 1000
+Servidor responde con ack 1100
+
+Eso significa:
+""He recibido hasta el byte 1099 correctamente""";;;;;

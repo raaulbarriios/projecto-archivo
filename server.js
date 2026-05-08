@@ -3,6 +3,8 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
+const MDBReader = require('mdb-reader');
+
 
 const app = express();
 const PORT = 3000;
@@ -18,10 +20,10 @@ if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR);
 }
 
-// Function to load all Excel files and parse them to memoryDB
-function loadExcelData() {
+// Function to load all supported files and parse them to memoryDB
+function loadData() {
     memoryDB = []; // Clear current db
-    console.log("Reading Excel files from:", DATA_DIR);
+    console.log("Reading data files from:", DATA_DIR);
     
     fs.readdir(DATA_DIR, (err, files) => {
         if (err) {
@@ -30,29 +32,113 @@ function loadExcelData() {
         }
 
         files.forEach(file => {
-            if (file.endsWith('.xlsx') || file.endsWith('.xls')) {
-                const filePath = path.join(DATA_DIR, file);
+            const filePath = path.join(DATA_DIR, file);
+            const ext = path.extname(file).toLowerCase();
+
+            // Handle Excel, Calc and CSV files
+            if (ext === '.xlsx' || ext === '.xls' || ext === '.ods' || ext === '.csv') {
+                let workbook;
                 try {
-                    const workbook = xlsx.readFile(filePath);
-                    
-                    // Iterate through all sheets
+                    console.log(`Intentando leer (modo binario): ${file}...`);
+                    const fileBuffer = fs.readFileSync(filePath);
+                    workbook = xlsx.read(fileBuffer, { 
+                        type: 'buffer',
+                        cellNF: false, 
+                        cellText: false,
+                        cellStyles: false,
+                        sheetStubs: true
+                    });
+                } catch (e) {
+                    console.warn(`  ! Fallo inicial en ${file}. Intentando Modo Seguro...`);
+                    try {
+                        // Segundo intento: Solo lectura de datos puros, sin nada extra
+                        const fileBuffer = fs.readFileSync(filePath);
+                        workbook = xlsx.read(fileBuffer, { 
+                            type: 'buffer',
+                            raw: true,
+                            nodane: true // Opción interna para saltar algunos nodos
+                        });
+                    } catch (e2) {
+                        console.error(`  X Error crítico en ${file}: No se puede procesar ni en Modo Seguro.`);
+                        return; // Siguiente archivo
+                    }
+                }
+
+                try {
                     workbook.SheetNames.forEach(sheetName => {
                         const sheet = workbook.Sheets[sheetName];
-                        // Get data as JSON array
-                        const sheetData = xlsx.utils.sheet_to_json(sheet, { defval: "" });
+                        // header: 1 returns an array of arrays (rows)
+                        const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "" });
                         
-                        sheetData.forEach(row => {
-                            // Add metadata about from where it came
+                        if (rows.length === 0) {
+                            console.log(`  - Hoja "${sheetName}" está vacía.`);
+                            return;
+                        }
+                        
+                        const headers = rows[0] || [];
+                        let sheetRecordsCount = 0;
+                        
+                        // Start from index 1 (skip headers)
+                        for (let i = 1; i < rows.length; i++) {
+                            const row = rows[i];
+                            // Skip completely empty rows
+                            if (!row || row.every(cell => cell === null || cell === undefined || cell === "")) continue;
+
+                            const record = {};
+                            // Map row data to headers
+                            headers.forEach((header, colIdx) => {
+                                const key = (header && String(header).trim()) || `Columna ${colIdx + 1}`;
+                                let cellValue = row[colIdx];
+                                
+                                // Si la celda es un error (como #VALOR!), SheetJS a veces devuelve un objeto {t:'e', v:15...}
+                                if (cellValue && typeof cellValue === 'object' && cellValue.t === 'e') {
+                                    cellValue = "[Error de celda / Foto]"; 
+                                }
+                                
+                                record[key] = cellValue;
+                            });
+
+                            record.__meta = {
+                                file: file,
+                                sheet: sheetName,
+                                type: 'spreadsheet',
+                                row: i + 1,
+                                headers: headers
+                            };
+                            memoryDB.push(record);
+                            sheetRecordsCount++;
+                        }
+                        console.log(`  - Hoja "${sheetName}": ${sheetRecordsCount} registros cargados.`);
+                    });
+                    console.log(`Cargado exitosamente: ${file}`);
+                } catch (e) {
+                    console.error(`Error procesando archivo ${file}:`, e.message);
+                }
+            } 
+            // Handle Access Database files
+            else if (ext === '.mdb' || ext === '.accdb') {
+                try {
+                    const buffer = fs.readFileSync(filePath);
+                    const reader = new MDBReader(buffer);
+                    
+                    const tableNames = reader.getTableNames();
+                    tableNames.forEach(tableName => {
+                        const table = reader.getTable(tableName);
+                        const tableData = table.getData();
+                        
+                        tableData.forEach((row, index) => {
                             row.__meta = {
                                 file: file,
-                                sheet: sheetName
+                                table: tableName,
+                                type: 'database',
+                                row: index + 1 // Row in table
                             };
                             memoryDB.push(row);
                         });
                     });
-                    console.log(`Loaded ${file} successfully.`);
+                    console.log(`Loaded database ${file} successfully.`);
                 } catch (e) {
-                    console.error(`Error processing file ${file}:`, e);
+                    console.error(`Error processing database ${file}:`, e);
                 }
             }
         });
@@ -62,11 +148,11 @@ function loadExcelData() {
 }
 
 // Load data initially
-loadExcelData();
+loadData();
 
-// Endpoint to refresh data (if they drop a new file and want to update without restarting)
+// Endpoint to refresh data
 app.get('/api/refresh', (req, res) => {
-    loadExcelData();
+    loadData();
     res.json({ message: "Data reloaded successfully", totalRecords: memoryDB.length });
 });
 
@@ -91,5 +177,5 @@ app.get('/api/search', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
-    console.log("Drop Excel files into the /data/ folder and they will be indexed.");
+    console.log("Drop Excel, ODS or Access files into the /data/ folder and they will be indexed.");
 });

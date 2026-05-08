@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Delay cards for staggered animation effect
         results.forEach((record, index) => {
             const meta = record.__meta;
+            const isSpreadsheet = meta.type === 'spreadsheet';
             
             // Remove meta before iterating main keys
             const displayData = { ...record };
@@ -123,6 +124,42 @@ document.addEventListener('DOMContentLoaded', () => {
             const card = document.createElement('div');
             card.className = 'record-card';
             card.style.animationDelay = `${index * 0.05}s`;
+
+            // Find matching columns for location info
+            let locationInfo = '';
+            let hasPhoto = false;
+
+            if (isSpreadsheet && meta.row) {
+                const matchingCols = [];
+                Object.entries(displayData).forEach(([key, val]) => {
+                    const stringVal = String(val).toLowerCase();
+                    const stringKey = String(key).toLowerCase();
+
+                    // Detect if this record might have a photo
+                    if (stringKey.includes('foto') || stringKey.includes('imagen') || stringVal.includes('http')) {
+                        if (val && stringVal !== "" && !stringVal.includes('[error')) {
+                            hasPhoto = true;
+                        }
+                    }
+
+                    if (stringVal.includes(query.toLowerCase())) {
+                        // Find the index of this header to get the column letter
+                        const colIdx = meta.headers.indexOf(key);
+                        if (colIdx !== -1) {
+                            matchingCols.push(colToLetter(colIdx));
+                        }
+                    }
+                });
+                
+                const colLabel = matchingCols.length > 0 ? ` - Col: ${matchingCols.join(', ')}` : '';
+                const sheetLabel = meta.sheet ? `Hoja: ${meta.sheet} - ` : '';
+                const photoBadge = hasPhoto ? '<span class="photo-badge" title="Este registro tiene una foto o enlace">📷 FOTO</span>' : '';
+                
+                locationInfo = `<div class="card-location">📍 ${sheetLabel}Fila: ${meta.row}${colLabel} ${photoBadge}</div>`;
+            } else if (meta.row) {
+                const typeLabel = meta.table ? `Tabla: ${meta.table} - ` : (meta.sheet ? `Hoja: ${meta.sheet} - ` : '');
+                locationInfo = `<div class="card-location">📍 ${typeLabel}Fila: ${meta.row}</div>`;
+            }
 
             // Build html for key-value pairs
             let gridHTML = '<div class="data-grid">';
@@ -156,9 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             card.innerHTML = `
                 <div class="card-header">
-                    <span class="card-source" title="Libro: ${escapeHTML(meta.file)}">
-                        ${fileIcon} ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet)}
+                    <span class="card-source" title="Archivo: ${escapeHTML(meta.file)}">
+                        ${fileIcon} ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table)}
                     </span>
+                    ${locationInfo}
                 </div>
                 ${gridHTML}
             `;
@@ -177,6 +215,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Utilities
+    function colToLetter(col) {
+        let letter = "";
+        while (col >= 0) {
+            letter = String.fromCharCode((col % 26) + 65) + letter;
+            col = Math.floor(col / 26) - 1;
+        }
+        return letter;
+    }
+
     function escapeHTML(str) {
         return str.replace(/[&<>'"]/g, 
             tag => ({
@@ -190,16 +237,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function highlightText(text, query) {
-        if (!query) return escapeHTML(text);
+        if (!text) return "";
+        let content = escapeHTML(String(text));
+        
+        // If it looks like a URL, make it clickable
+        if (content.startsWith('http')) {
+            return `<a href="${content}" target="_blank" class="data-link">Abrir enlace 🔗</a>`;
+        }
+
+        if (!query) return content;
         
         // Escape characters for regex
         const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`(${safeQuery})`, 'gi');
         
         // Find matches and escape HTML properly
-        return text.replace(regex, (match) => `<span class="highlight">${escapeHTML(match)}</span>`)
-                   // Fix nested or previously escaped stuff if needed (this quick approach works for simple strings)
-                   .replace(/&amp;/g, '&'); 
-                   // Ideally we'd map it differently but for UI strings this regex approach handles it visually well.
+        return content.replace(regex, (match) => `<span class="highlight">${match}</span>`);
     }
 });
