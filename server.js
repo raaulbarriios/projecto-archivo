@@ -165,14 +165,53 @@ app.get('/api/search', (req, res) => {
     }
 
     const lowerQuery = query.toLowerCase();
-    const results = memoryDB.filter(record => {
-        // Search in all values of the object
-        return Object.values(record).some(value => 
-            String(value).toLowerCase().includes(lowerQuery)
-        );
-    });
+    const results = [];
+    
+    // Optimized loop for large datasets
+    for (let i = 0; i < memoryDB.length; i++) {
+        const record = memoryDB[i];
+        let match = false;
+        
+        for (const key in record) {
+            if (key === '__meta') continue;
+            const value = record[key];
+            if (value && String(value).toLowerCase().includes(lowerQuery)) {
+                match = true;
+                break;
+            }
+        }
+        
+        if (match) {
+            results.push(record);
+            // Limit results for extremely large matches to prevent browser crash
+            if (results.length >= 10000) break;
+        }
+    }
 
     res.json(results);
+});
+
+// Endpoint to serve a file by its path
+app.get('/api/file', (req, res) => {
+    const requestedPath = req.query.path;
+    if (!requestedPath) return res.status(400).send('Path parameter is required');
+
+    // Handle both absolute and relative paths
+    let fullPath = requestedPath;
+    if (!path.isAbsolute(requestedPath)) {
+        fullPath = path.resolve(DATA_DIR, requestedPath);
+    }
+
+    // Security check: only serve if file exists
+    if (fs.existsSync(fullPath)) {
+        // Optional: Check if it's a directory
+        if (fs.lstatSync(fullPath).isDirectory()) {
+            return res.status(400).send('Cannot serve a directory');
+        }
+        res.sendFile(fullPath);
+    } else {
+        res.status(404).send('File not found: ' + requestedPath);
+    }
 });
 
 app.listen(PORT, () => {
