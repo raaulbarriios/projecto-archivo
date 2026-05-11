@@ -192,6 +192,15 @@ header p {
     color: white;
 }
 
+.refresh-btn.loading svg {
+    animation: spin 1s linear infinite;
+}
+
+.refresh-btn.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
 /* Results Section */
 .results-section {
     display: grid;
@@ -366,7 +375,9 @@ header p {
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.05);
     transition: var(--transition);
+    cursor: pointer;
 }
+
 
 .path-thumbnail-container:hover {
     background: rgba(255, 255, 255, 0.07);
@@ -420,15 +431,53 @@ header p {
     letter-spacing: 0.5px;
 }
 
-.path-link {
-    font-size: 0.7rem;
-    color: var(--accent);
-    opacity: 0.5;
-    text-decoration: none;
-    margin-top: 2px;
+.path-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+    align-items: center;
 }
 
-.path-link:hover {
-    opacity: 1;
-    text-decoration: underline;
+.path-button {
+    background: rgba(102, 252, 241, 0.1);
+    border: 1px solid rgba(102, 252, 241, 0.2);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: var(--transition);
 }
+
+.path-button:hover {
+    background: var(--accent);
+    color: #000;
+}
+
+.text-link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    opacity: 0.8;
+    transition: var(--transition);
+}
+
+.text-link:hover {
+    opacity: 1;
+    color: #fff;
+}
+
+/* Image optimization */
+.thumbnail-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.thumbnail-img.loaded {
+    opacity: 1;
+}
+

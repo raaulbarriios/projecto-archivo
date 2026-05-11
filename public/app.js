@@ -4,15 +4,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsContainer = document.getElementById('resultsContainer');
     const resultCount = document.getElementById('resultCount');
     const refreshBtn = document.getElementById('refreshBtn');
+    const rebuildIndexBtn = document.getElementById('rebuildIndexBtn');
 
-    let debounceTimer;
-    let searchCache = {}; // Simple caching to reduce API calls for same queries
-    
-    // Pagination variables
-    let allResults = [];
+    // Pagination and state variables
     let currentRenderIndex = 0;
     const CHUNK_SIZE = 50;
     let currentQuery = "";
+    let isWorkerReady = false;
+    let isLoadingMore = false;
+    let hasMoreResults = true;
+    let debounceTimer;
+
+    const searchWorker = new Worker('search-worker.js');
 
     // Handle user typing
     searchInput.addEventListener('input', (e) => {
@@ -42,38 +45,134 @@ document.addEventListener('DOMContentLoaded', () => {
         showEmptyState();
     });
 
-    // Refresh Data button
-    refreshBtn.addEventListener('click', async () => {
-        const originalText = refreshBtn.innerHTML;
-        refreshBtn.innerHTML = 'Actualizando...';
-        refreshBtn.style.opacity = '0.5';
-        refreshBtn.style.pointerEvents = 'none';
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('fileInput');
 
+    // Handle messages from worker
+    searchWorker.onmessage = (e) => {
+        const { type, payload, meta } = e.data;
+        
+        if (type === 'READY') {
+            isWorkerReady = true;
+            resultCount.textContent = `Listos. ${payload.totalRecords} registros indexados en base de datos local.`;
+            refreshBtn.classList.remove('loading');
+            importBtn.classList.remove('loading');
+            // Show some initial data
+            performSearch("");
+        } else if (type === 'SEARCH_RESULTS') {
+            const results = payload;
+            if (meta.offset === 0) {
+                resultsContainer.innerHTML = '';
+                if (results.length === 0) {
+                    showNoResults();
+                } else {
+                    resultCount.textContent = `Mostrando resultados para "${currentQuery || 'todo'}"`;
+                }
+            }
+            
+            appendResults(results);
+            isLoadingMore = false;
+            hasMoreResults = results.length === CHUNK_SIZE;
+            currentRenderIndex += results.length;
+            
+            setupInfiniteScroll();
+        }
+    };
+
+    // Manual Import
+    importBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        importBtn.classList.add('loading');
+        resultCount.textContent = `Procesando e indexando ${files.length} archivos...`;
+        searchWorker.postMessage({ type: 'LOAD_FILES', payload: { files, isLocalFiles: true } });
+    });
+
+    // Load initial data from server if available
+    initData();
+
+    async function initData() {
+        resultCount.textContent = 'Verificando índice de datos optimizado...';
         try {
-            const response = await fetch('/api/refresh');
+            const statusResp = await fetch('/api/index-status');
+            const status = await statusResp.json();
+            
+            if (status.exists) {
+                const sizeMB = (status.size / (1024 * 1024)).toFixed(2);
+                resultCount.textContent = `Cargando índice optimizado (${sizeMB} MB)...`;
+                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
+                return;
+            }
+
+            resultCount.textContent = 'Buscando archivos en el servidor...';
+            const response = await fetch('/api/files');
+            if (!response.ok) throw new Error();
             const data = await response.json();
             
-            // Re-run current search if exists
-            const currentQuery = searchInput.value.trim();
-            searchCache = {}; // Invalidate cache
-            
-            if (currentQuery) {
-                performSearch(currentQuery);
+            if (data.files && data.files.length > 0) {
+                resultCount.textContent = `Indexando ${data.files.length} archivos del servidor...`;
+                searchWorker.postMessage({ type: 'LOAD_FILES', payload: { files: data.files, isLocalFiles: false } });
             } else {
-                resultCount.textContent = `Listos. ${data.totalRecords} registros en memoria.`;
+                checkExistingDB();
             }
         } catch (error) {
-            console.error("Error refreshing data:", error);
-            resultCount.textContent = "Error al actualizar caché.";
+            console.log('Servidor no detectado o carpeta vacía, usando base de datos local existente.');
+            checkExistingDB();
+        }
+    }
+
+    async function checkExistingDB() {
+        // We can use Dexie here too to check if we have data
+        const db = new Dexie("ArchivoDB");
+        db.version(2).stores({ records: '++id, file, sheet, row, titulo, autor, isbn, estado, *searchWords' });
+        const count = await db.records.count();
+        if (count > 0) {
+            isWorkerReady = true;
+            resultCount.textContent = `Base de datos local cargada: ${count} registros.`;
+            performSearch("");
+        } else {
+            resultCount.textContent = 'No hay datos. Haz clic en "Importar Archivos" para empezar.';
+        }
+    }
+
+    // Refresh Data button
+    refreshBtn.addEventListener('click', () => {
+        if (refreshBtn.classList.contains('loading')) return;
+        
+        refreshBtn.classList.add('loading');
+        resultCount.textContent = 'Actualizando archivos...';
+        initData();
+    });
+
+    // Rebuild Index button
+    rebuildIndexBtn.addEventListener('click', async () => {
+        if (rebuildIndexBtn.classList.contains('loading')) return;
+        
+        rebuildIndexBtn.classList.add('loading');
+        resultCount.textContent = 'Generando índice JSON en servidor (un momento)...';
+        
+        try {
+            const response = await fetch('/api/rebuild-index', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.success) {
+                resultCount.textContent = `¡Hecho! ${data.count} registros optimizados. Cargando...`;
+                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (error) {
+            console.error(error);
+            resultCount.textContent = 'Error al optimizar: ' + error.message;
         } finally {
-            refreshBtn.innerHTML = originalText;
-            refreshBtn.style.opacity = '1';
-            refreshBtn.style.pointerEvents = 'auto';
+            rebuildIndexBtn.classList.remove('loading');
         }
     });
 
-    async function performSearch(query) {
-        if (!query) return;
+    function performSearch(query) {
+        if (!query || !isWorkerReady) return;
         currentQuery = query;
 
         // Check cache
@@ -85,69 +184,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Show loading state
         resultsContainer.innerHTML = '<div class="spinner"></div>';
-        resultCount.textContent = 'Buscando...';
+        resultCount.textContent = 'Buscando en registros locales...';
 
-        try {
-            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-            if (!response.ok) throw new Error('Network response was not ok');
-            
-            const results = await response.json();
-            searchCache[query] = results; // Save to cache
-            allResults = results;
-            renderInitialResults();
-        } catch (error) {
-            console.error('Error fetching search results:', error);
-            resultsContainer.innerHTML = `
-                <div class="empty-state" style="border-color: #ff4b4b;">
-                    <p style="color: #ff4b4b;">Error de conexión con el servidor local. Asegúrate de ejecutar <code>node server.js</code></p>
-                </div>
-            `;
-            resultCount.textContent = '';
-        }
+        // Send search request to worker
+        searchWorker.postMessage({ type: 'SEARCH', payload: { query } });
     }
 
-    function renderInitialResults() {
-        resultsContainer.innerHTML = '';
+    function performSearch(query) {
+        if (!isWorkerReady) return;
+        currentQuery = query;
         currentRenderIndex = 0;
-        
-        if (allResults.length === 0) {
-            resultsContainer.innerHTML = `
-                <div class="empty-state">
-                    <p>No se encontraron registros para "<strong>${escapeHTML(currentQuery)}</strong>"</p>
-                </div>
-            `;
-            resultCount.textContent = '0 resultados';
-            return;
-        }
+        hasMoreResults = true;
+        isLoadingMore = true;
 
-        resultCount.textContent = `${allResults.length} coincidencias encontradas`;
-        renderNextChunk();
-        
-        // Add sentinel for infinite scroll
-        setupInfiniteScroll();
+        resultsContainer.innerHTML = '<div class="spinner"></div>';
+        resultCount.textContent = 'Consultando base de datos...';
+
+        searchWorker.postMessage({ 
+            type: 'SEARCH', 
+            payload: { query, offset: 0, limit: CHUNK_SIZE } 
+        });
     }
 
-    function renderNextChunk() {
-        const nextIndex = Math.min(currentRenderIndex + CHUNK_SIZE, allResults.length);
-        const chunk = allResults.slice(currentRenderIndex, nextIndex);
-        
+    function showNoResults() {
+        resultsContainer.innerHTML = `
+            <div class="empty-state">
+                <p>No se encontraron registros para "<strong>${escapeHTML(currentQuery)}</strong>"</p>
+            </div>
+        `;
+        resultCount.textContent = '0 resultados';
+    }
+
+    function appendResults(results) {
         const fragment = document.createDocumentFragment();
-        
-        chunk.forEach((record, i) => {
+        results.forEach((record, i) => {
             const card = createRecordCard(record, currentRenderIndex + i);
             fragment.appendChild(card);
         });
-        
         resultsContainer.appendChild(fragment);
-        currentRenderIndex = nextIndex;
+    }
 
-        // Hide sentinel if all loaded
-        const sentinel = document.getElementById('loadMoreSentinel');
-        if (currentRenderIndex >= allResults.length && sentinel) {
-            sentinel.style.display = 'none';
-        } else if (sentinel) {
-            sentinel.style.display = 'block';
-        }
+    function renderNextChunk() {
+        if (!isWorkerReady || isLoadingMore || !hasMoreResults) return;
+        
+        isLoadingMore = true;
+        searchWorker.postMessage({ 
+            type: 'SEARCH', 
+            payload: { query: currentQuery, offset: currentRenderIndex, limit: CHUNK_SIZE } 
+        });
     }
 
     function setupInfiniteScroll() {
@@ -162,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContainer.appendChild(sentinel);
 
         const observer = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting && currentRenderIndex < allResults.length) {
+            if (entries[0].isIntersecting && hasMoreResults && !isLoadingMore) {
                 renderNextChunk();
             }
         }, { rootMargin: '400px' });
@@ -204,18 +288,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (stringVal.includes(currentQuery.toLowerCase())) {
-                    const colIdx = meta.headers.indexOf(key);
+                    const colIdx = meta.headers ? meta.headers.indexOf(key) : -1;
                     if (colIdx !== -1) {
                         matchingCols.push(colToLetter(colIdx));
                     }
                 }
             });
             
-            const colLabel = matchingCols.length > 0 ? ` - Col: ${matchingCols.join(', ')}` : '';
             const sheetLabel = meta.sheet ? `Hoja: ${meta.sheet} - ` : '';
             const photoBadge = hasPhoto ? '<span class="photo-badge" title="Este registro tiene una foto o enlace">📷 FOTO</span>' : '';
             
-            locationInfo = `<div class="card-location">📍 ${sheetLabel}Fila: ${meta.row}${colLabel} ${photoBadge}</div>`;
+            locationInfo = `<div class="card-location">📍 ${sheetLabel}Fila: ${meta.row} ${photoBadge}</div>`;
         } else if (meta.row) {
             const typeLabel = meta.table ? `Tabla: ${meta.table} - ` : (meta.sheet ? `Hoja: ${meta.sheet} - ` : '');
             locationInfo = `<div class="card-location">📍 ${typeLabel}Fila: ${meta.row}</div>`;
@@ -293,46 +376,76 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function highlightText(text, query) {
         if (!text) return "";
-        let content = String(text);
+        let content = String(text).trim();
         
-        // Detect if it's a file path
-        if (isFilePath(content)) {
+        // Check if it's a URL
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        if (urlRegex.test(content) && content.length < 500) {
+             // If it's JUST a URL, return a nice button
+             if (content.match(/^https?:\/\/[^\s]+$/)) {
+                 return `<a href="${content}" target="_blank" class="data-link">Abrir enlace 🔗</a>`;
+             }
+             // If it contains a URL, replace it with a link
+             content = content.replace(urlRegex, (url) => `<a href="${url}" target="_blank" class="text-link">${url}</a>`);
+        }
+
+        // Detect if it's a file path (and not a long text)
+        if (isFilePath(content) && content.length < 300) {
             return renderPathThumbnail(content, query);
         }
 
-        // If it looks like a URL, make it clickable
-        if (content.startsWith('http')) {
-            return `<a href="${content}" target="_blank" class="data-link">Abrir enlace 🔗</a>`;
-        }
-
-        let escapedContent = escapeHTML(content);
+        let escapedContent = content.includes('<a') ? content : escapeHTML(content);
         if (!query) return escapedContent;
         
         // Escape characters for regex
         const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`(${safeQuery})`, 'gi');
         
-        // Find matches and escape HTML properly
+        // Find matches and escape HTML properly, but avoid breaking existing links if we injected them
+        if (content.includes('<a')) {
+            // Complex case: highlight only outside tags
+            return escapedContent; // For now skip highlighting in complex HTML to avoid breakage
+        }
+
         return escapedContent.replace(regex, (match) => `<span class="highlight">${match}</span>`);
     }
 
+
     function isFilePath(str) {
         if (typeof str !== 'string' || str.length < 3) return false;
-        // Basic path detection: starts with C:\, /, ./, or contains \ and has an extension
-        const pathRegex = /^([a-zA-Z]:\\|\\\\|\/|\.\/|\.\.\\)/;
-        const extensionRegex = /\.(jpg|jpeg|png|gif|webp|pdf|docx|xlsx|xls|txt|csv|ods|accdb|mdb|zip|rar|mp4|mov)$/i;
+        if (str.startsWith('http')) return false;
+
+        // Basic path detection: starts with C:\, C:/, //, /, ./, or ../
+        const pathRegex = /^([a-zA-Z]:[\\/]|\\\\|\/|\.\/|\.\.\\)/;
+
+        const extensionRegex = /\.(jpg|jpeg|png|gif|webp|pdf|docx|xlsx|xls|txt|csv|ods|accdb|mdb|zip|rar|mp4|mov|pptx|html)$/i;
         
-        // Return true if it looks like a path or if it has a file extension and common path separators
-        return pathRegex.test(str) || (extensionRegex.test(str) && (str.includes('\\') || str.includes('/')));
+        // Also check if it's just a filename with an image extension (often found in excel columns)
+        const isJustImageFile = extensionRegex.test(str) && !str.includes(' ') && str.length < 50;
+
+        return pathRegex.test(str) || (extensionRegex.test(str) && (str.includes('\\') || str.includes('/'))) || isJustImageFile;
     }
+
 
     function renderPathThumbnail(pathStr, query) {
         const fileName = pathStr.split(/[\\/]/).pop();
         const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
         const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension);
         
-        // Encode path for the API
-        const imgSrc = isImage ? `/api/file?path=${encodeURIComponent(pathStr)}` : null;
+        // Determine the best source for the image
+        let imgSrc = null;
+        if (isImage) {
+            if (pathStr.includes('\\') || pathStr.includes('/') || pathStr.includes(':')) {
+                // It's a path, use the file proxy
+                imgSrc = `/api/file?path=${encodeURIComponent(pathStr)}`;
+            } else {
+                // It's just a filename, look in the /imagenes folder
+                imgSrc = `/imagenes/${encodeURIComponent(pathStr)}`;
+            }
+        }
+        
+        const previewUrl = isImage ? imgSrc : `/api/file?path=${encodeURIComponent(pathStr)}`;
+        const openUrl = `/api/open-file?path=${encodeURIComponent(pathStr)}`;
         
         const fileIcon = `
             <svg class="file-icon-placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -342,18 +455,56 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         return `
-            <div class="path-thumbnail-container">
-                <div class="thumbnail-wrapper">
-                    ${isImage ? `<img src="${imgSrc}" alt="${escapeHTML(fileName)}" class="thumbnail-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block'"><div style="display:none">${fileIcon}</div>` : fileIcon}
+            <div class="path-thumbnail-container" onclick="if(event.target.tagName !== 'BUTTON' && event.target.tagName !== 'A') window.open('${previewUrl}', '_blank')">
+                <div class="thumbnail-wrapper" title="Hacer clic para previsualizar">
+                    ${isImage ? `
+                        <img src="${imgSrc}" 
+                             alt="${escapeHTML(fileName)}" 
+                             class="thumbnail-img" 
+                             onload="this.classList.add('loaded')"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+                        <div style="display:none">${fileIcon}</div>
+                    ` : fileIcon}
                 </div>
                 <div class="file-info">
-                    <span class="file-name" title="${escapeHTML(pathStr)}">${highlightTextRaw(fileName, query)}</span>
+                    <span class="file-name" title="Hacer clic para previsualizar">${highlightTextRaw(fileName, query)}</span>
                     <span class="file-type">${extension || 'archivo'}</span>
-                    <a href="/api/file?path=${encodeURIComponent(pathStr)}" target="_blank" class="path-link" title="Abrir archivo">Abrir en nueva pestaña</a>
+                    <div class="path-actions">
+                        <a href="${previewUrl}" target="_blank" class="path-link">Previsualizar</a>
+                        <button onclick="openLocally(event, '${pathStr}')" class="path-button" title="Abrir con el programa del sistema">Abrir en PC 💻</button>
+                    </div>
                 </div>
             </div>
         `;
     }
+
+    // New helper for opening local files with feedback
+    window.openLocally = async (event, path) => {
+        event.stopPropagation();
+        const btn = event.currentTarget;
+        const originalText = btn.innerHTML;
+        
+        try {
+            btn.innerHTML = 'Abriendo...';
+            btn.style.opacity = '0.7';
+            const response = await fetch(`/api/open-file?path=${encodeURIComponent(path)}`);
+            if (!response.ok) throw new Error();
+            
+            btn.innerHTML = '¡Abierto! ✅';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.opacity = '1';
+            }, 2000);
+        } catch (e) {
+            btn.innerHTML = 'Error ❌';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.style.opacity = '1';
+            }, 2000);
+        }
+    };
+
+
 
     function highlightTextRaw(text, query) {
         if (!text) return "";
