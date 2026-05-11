@@ -217,6 +217,91 @@ header p {
     backdrop-filter: blur(5px);
 }
 
+.advanced-toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 8px;
+    margin-right: 0.5rem;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.advanced-toggle-btn:hover {
+    background: var(--card-bg);
+    color: var(--accent);
+}
+
+.advanced-toggle-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.advanced-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+    box-shadow: var(--shadow-sm);
+    animation: slideDown 0.3s ease;
+    margin-bottom: 2rem;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.filter-group input, .filter-group select {
+    padding: 0.75rem;
+    background: rgba(31, 40, 51, 0.8);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: var(--transition);
+}
+
+.filter-group select option {
+    background: #1f2833;
+    color: white;
+}
+
+.filter-group input:focus, .filter-group select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(102, 252, 241, 0.1);
+}
+
+.hidden {
+    display: none !important;
+}
+
 /* Cards */
 .record-card {
     background: var(--card-bg);

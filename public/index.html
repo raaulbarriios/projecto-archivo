@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buscador del Archivo Histórico</title>
     <!-- Google Fonts for typography -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <!-- Dexie.js for lightweight IndexedDB management -->
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
 </head>
+
 <body>
     <div class="background-elements">
         <div class="glow-orb" id="orb1"></div>
@@ -24,39 +28,73 @@
 
         <section class="search-section">
             <div class="search-box">
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="text" id="searchInput" placeholder="Ej. Juan Pérez, número de pasaporte o localidad..." autocomplete="off">
+                <input type="text" id="searchInput" placeholder="Búsqueda rápida (ej: Juan Pérez 1789)..."
+                    autocomplete="off">
+                <button id="advancedSearchToggle" class="advanced-toggle-btn" title="Búsqueda Avanzada">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                </button>
                 <button id="clearBtn" class="clear-btn hidden" aria-label="Limpiar búsqueda">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
                 </button>
             </div>
-            
+
+            <!-- Advanced Search Panel -->
+            <div id="advancedPanel" class="advanced-panel hidden">
+                <div class="advanced-grid">
+                    <div class="filter-group">
+                        <label for="filterYear">Año / Fecha</label>
+                        <input type="text" id="filterYear" placeholder="Ej: 1890">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterFile">Sección / Archivo</label>
+                        <select id="filterFile">
+                            <option value="">Todos los archivos</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterDoc">OBSERVACIONES</label>
+                        <input type="text" id="filterDoc" placeholder="Ej: Pasaporte">
+                    </div>
+                </div>
+            </div>
+
             <div class="status-bar">
                 <span id="resultCount" class="result-count">Escriba para empezar a buscar.</span>
                 <button id="refreshBtn" class="refresh-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
                         <polyline points="23 4 23 10 17 10"></polyline>
                         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                     </svg>
                     Actualizar Carpeta
                 </button>
                 <button id="rebuildIndexBtn" class="refresh-btn" style="border-color: #f6ad55; color: #f6ad55;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path
+                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                        </path>
                         <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
                         <line x1="12" y1="22.08" x2="12" y2="12"></line>
                     </svg>
                     Optimizar Datos
                 </button>
-                <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.ods" style="display:none">
+                <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.ods,.accdb,.mdb,.jpg,.jpeg,.png,.gif" style="display:none">
                 <button id="importBtn" class="refresh-btn" style="border-color: #6a0dad; color: #b794f4;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="17 8 12 3 7 8"></polyline>
                         <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -70,10 +108,12 @@
             <!-- Los resultados aparecerán aquí -->
             <div class="empty-state" id="emptyState">
                 <div class="empty-icon"></div>
-                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.</p>
+                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.
+                </p>
             </div>
         </section>
     </main>
     <script src="app.js"></script>
 </body>
+
 </html>

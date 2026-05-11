@@ -5,13 +5,41 @@ const path = require('path');
 const xlsx = require('xlsx');
 const MDBReader = require('mdb-reader');
 const { exec } = require('child_process');
+const multer = require('multer');
 
 
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const isImage = ['.jpg', '.jpeg', '.png', '.gif'].includes(ext);
+        const dest = isImage ? path.join(__dirname, 'imagenes') : path.join(__dirname, 'data');
+        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+        cb(null, dest);
+    },
+    filename: (req, file, cb) => {
+        cb(null, file.originalname);
+    }
+});
+const upload = multer({ storage });
 
 const app = express();
 const PORT = 3000;
 
 app.use(cors());
+app.use(express.json());
+
+// File upload endpoint
+app.post('/api/upload', upload.array('files'), (req, res) => {
+    try {
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ success: false, error: "No se subieron archivos" });
+        }
+        res.json({ success: true, count: req.files.length });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 const DATA_DIR = path.join(__dirname, 'data');
@@ -165,6 +193,11 @@ app.get('/api/open-file', (req, res) => {
     }
 });
 
+// Global error handler to ensure JSON responses
+app.use((err, req, res, next) => {
+    console.error("Server Error:", err);
+    res.status(500).json({ success: false, error: err.message || "Error interno del servidor" });
+});
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);

@@ -55,8 +55,7 @@ onmessage = async function(e) {
                 console.error(`Worker error:`, err);
             }
         }
-        const total = await db.records.count();
-        postMessage({ type: 'READY', payload: { totalRecords: total } });
+        await sendReadyMessage();
     }
 
     if (type === 'LOAD_JSON') {
@@ -83,8 +82,7 @@ onmessage = async function(e) {
             }
             if (batch.length > 0) await db.records.bulkPut(batch);
             
-            const total = await db.records.count();
-            postMessage({ type: 'READY', payload: { totalRecords: total } });
+            await sendReadyMessage();
         } catch (err) {
             console.error("Error loading JSON:", err);
             postMessage({ type: 'READY', payload: { totalRecords: 0, error: err.message } });
@@ -130,73 +128,56 @@ onmessage = async function(e) {
     }
 
     if (type === 'SEARCH') {
-        const { query, offset = 0, limit = 50 } = payload;
+        const { query, filters, offset = 0, limit = 50 } = payload;
         const lowerQuery = query.toLowerCase().trim();
-        const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+        const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 2);
         
         try {
-            let results = [];
-            if (!lowerQuery) {
-                results = await db.records.offset(offset).limit(limit).toArray();
-            } else {
-                // 1. Try indexed search with the first word (very fast)
-                results = await db.records
-                    .where('searchWords')
-                    .startsWith(queryWords[0])
-                    .distinct()
-                    .toArray();
-                
-                // 2. Filter these results to ensure they match ALL query words
-                if (queryWords.length > 1) {
-                    results = results.filter(r => {
-                        const allText = Object.values(r.data).join(' ').toLowerCase();
-                        return queryWords.every(qw => allText.includes(qw));
+            let queryChain = db.records;
+
+            // Apply advanced filters if provided
+            if (filters) {
+                if (filters.file) {
+                    queryChain = queryChain.where('file').equals(filters.file);
+                }
+                if (filters.year) {
+                    const yearStr = String(filters.year);
+                    queryChain = queryChain.filter(r => {
+                        const rowText = Object.values(r.data).join(' ');
+                        return rowText.includes(yearStr);
                     });
                 }
-
-                // 3. Fallback: If not enough results, do a scan (slower but covers everything)
-                if (results.length < limit) {
-                    const fallbackResults = await db.records
-                        .filter(r => {
-                            const allText = Object.values(r.data).join(' ').toLowerCase();
-                            // Check for exact phrase or all words
-                            return allText.includes(lowerQuery) || queryWords.every(qw => allText.includes(qw));
-                        })
-                        .limit(limit + offset + 50) 
-                        .toArray();
-                    
-                    // Merge and deduplicate
-                    const seenIds = new Set(results.map(r => r.id));
-                    for (const fr of fallbackResults) {
-                        if (!seenIds.has(fr.id)) {
-                            results.push(fr);
-                        }
-                    }
+                if (filters.doc) {
+                    const docStr = filters.doc.toLowerCase();
+                    queryChain = queryChain.filter(r => {
+                        const rowText = Object.values(r.data).join(' ').toLowerCase();
+                        return rowText.includes(docStr);
+                    });
                 }
-                
-                // Sort by relevance (basic: phrase matches first)
-                results.sort((a, b) => {
-                    const aText = Object.values(a.data).join(' ').toLowerCase();
-                    const bText = Object.values(b.data).join(' ').toLowerCase();
-                    const aHasPhrase = aText.includes(lowerQuery);
-                    const bHasPhrase = bText.includes(lowerQuery);
-                    if (aHasPhrase && !bHasPhrase) return -1;
-                    if (!aHasPhrase && bHasPhrase) return 1;
-                    return 0;
-                });
-
-                results = results.slice(offset, offset + limit);
             }
 
+            let results = [];
+            if (!lowerQuery) {
+                results = await queryChain.offset(offset).limit(limit).toArray();
+            } else {
+                // Combine multi-word search with query chain
+                results = await queryChain
+                    .filter(r => {
+                        const allText = Object.values(r.data).join(' ').toLowerCase();
+                        return queryWords.every(qw => allText.includes(qw));
+                    })
+                    .offset(offset)
+                    .limit(limit)
+                    .toArray();
+            }
             
-            // Map back to the format expected by the frontend
+            // Map to frontend format
             const mappedResults = results.map(r => ({
                 ...r.data,
                 __meta: {
                     file: r.file,
                     sheet: r.sheet,
                     row: r.row,
-                    headers: Object.keys(r.data),
                     type: 'spreadsheet'
                 }
             }));
@@ -207,3 +188,9 @@ onmessage = async function(e) {
         }
     }
 };
+
+async function sendReadyMessage() {
+    const total = await db.records.count();
+    const files = await db.records.orderBy('file').uniqueKeys();
+    postMessage({ type: 'READY', payload: { totalRecords: total, files: files } });
+}

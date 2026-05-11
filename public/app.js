@@ -5,8 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultCount = document.getElementById('resultCount');
     const refreshBtn = document.getElementById('refreshBtn');
     const rebuildIndexBtn = document.getElementById('rebuildIndexBtn');
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('fileInput');
 
-    // Pagination and state variables
+    // State variables
     let currentRenderIndex = 0;
     const CHUNK_SIZE = 50;
     let currentQuery = "";
@@ -15,179 +17,145 @@ document.addEventListener('DOMContentLoaded', () => {
     let hasMoreResults = true;
     let debounceTimer;
 
+    // Advanced Search Logic
+    const advancedSearchToggle = document.getElementById('advancedSearchToggle');
+    const advancedPanel = document.getElementById('advancedPanel');
+    const filterYear = document.getElementById('filterYear');
+    const filterFile = document.getElementById('filterFile');
+    const filterDoc = document.getElementById('filterDoc');
+
     const searchWorker = new Worker('search-worker.js');
 
-    // Handle user typing
+    // UI Events
+    advancedSearchToggle.addEventListener('click', () => {
+        advancedPanel.classList.toggle('hidden');
+        advancedSearchToggle.classList.toggle('active');
+    });
+
+    [filterYear, filterFile, filterDoc].forEach(el => {
+        const eventType = el.tagName === 'SELECT' ? 'change' : 'input';
+        el.addEventListener(eventType, () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                performSearch(searchInput.value.trim());
+            }, 300);
+        });
+    });
+
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
-        
-        // Show/hide clear button
-        if (query.length > 0) {
-            clearBtn.classList.remove('hidden');
-        } else {
-            clearBtn.classList.add('hidden');
-            showEmptyState();
-            return;
-        }
-
-        // Debounce to avoid hammering the server as they type
+        clearBtn.classList.toggle('hidden', query.length === 0);
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            performSearch(query);
-        }, 300);
+        debounceTimer = setTimeout(() => performSearch(query), 300);
     });
 
-    // Clear button
     clearBtn.addEventListener('click', () => {
         searchInput.value = '';
-        searchInput.focus();
+        filterYear.value = '';
+        filterDoc.value = '';
+        filterFile.value = '';
         clearBtn.classList.add('hidden');
-        showEmptyState();
+        performSearch("");
     });
 
-    const importBtn = document.getElementById('importBtn');
-    const fileInput = document.getElementById('fileInput');
+    refreshBtn.addEventListener('click', () => {
+        if (refreshBtn.classList.contains('loading')) return;
+        refreshBtn.classList.add('loading');
+        initData();
+    });
 
-    // Handle messages from worker
+    async function triggerRebuild(skipConfirm = false) {
+        if (rebuildIndexBtn.classList.contains('loading')) return;
+        if (!skipConfirm && !confirm("Esto procesará todos los archivos en el servidor. ¿Continuar?")) return;
+
+        rebuildIndexBtn.classList.add('loading');
+        resultCount.textContent = 'Generando índice en servidor...';
+        
+        try {
+            const response = await fetch('/api/rebuild-index', { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                resultCount.textContent = `¡Hecho! ${data.count} registros optimizados.`;
+                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
+            }
+        } catch (err) {
+            resultCount.textContent = 'Error al optimizar.';
+        } finally {
+            rebuildIndexBtn.classList.remove('loading');
+        }
+    }
+
+    rebuildIndexBtn.addEventListener('click', () => triggerRebuild(false));
+
+    importBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        importBtn.classList.add('loading');
+        resultCount.textContent = `Subiendo ${files.length} archivos al servidor...`;
+
+        const formData = new FormData();
+        files.forEach(f => formData.append('files', f));
+
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                resultCount.textContent = `¡Subidos! Procesando e indexando...`;
+                // Trigger index rebuild automatically without another confirmation
+                triggerRebuild(true);
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (err) {
+            alert("Error al subir archivos: " + err.message);
+            resultCount.textContent = 'Error en la subida.';
+        } finally {
+            importBtn.classList.remove('loading');
+            fileInput.value = ''; // Reset input
+        }
+    });
+
+    // Worker Communication
     searchWorker.onmessage = (e) => {
         const { type, payload, meta } = e.data;
         
         if (type === 'READY') {
             isWorkerReady = true;
-            resultCount.textContent = `Listos. ${payload.totalRecords} registros indexados en base de datos local.`;
+            resultCount.textContent = `Listos. ${payload.totalRecords} registros disponibles.`;
             refreshBtn.classList.remove('loading');
             importBtn.classList.remove('loading');
-            // Show some initial data
-            performSearch("");
+            if (payload.files) updateFileFilter(payload.files);
+            performSearch(searchInput.value.trim());
         } else if (type === 'SEARCH_RESULTS') {
-            const results = payload;
             if (meta.offset === 0) {
                 resultsContainer.innerHTML = '';
-                if (results.length === 0) {
-                    showNoResults();
-                } else {
-                    resultCount.textContent = `Mostrando resultados para "${currentQuery || 'todo'}"`;
-                }
+                if (payload.length === 0) showNoResults();
+                else resultCount.textContent = `Mostrando resultados para "${currentQuery || 'todo'}"`;
             }
-            
-            appendResults(results);
+            appendResults(payload);
             isLoadingMore = false;
-            hasMoreResults = results.length === CHUNK_SIZE;
-            currentRenderIndex += results.length;
-            
+            hasMoreResults = payload.length === CHUNK_SIZE;
+            currentRenderIndex += payload.length;
             setupInfiniteScroll();
         }
     };
 
-    // Manual Import
-    importBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-        
-        importBtn.classList.add('loading');
-        resultCount.textContent = `Procesando e indexando ${files.length} archivos...`;
-        searchWorker.postMessage({ type: 'LOAD_FILES', payload: { files, isLocalFiles: true } });
-    });
-
-    // Load initial data from server if available
-    initData();
-
-    async function initData() {
-        resultCount.textContent = 'Verificando índice de datos optimizado...';
-        try {
-            const statusResp = await fetch('/api/index-status');
-            const status = await statusResp.json();
-            
-            if (status.exists) {
-                const sizeMB = (status.size / (1024 * 1024)).toFixed(2);
-                resultCount.textContent = `Cargando índice optimizado (${sizeMB} MB)...`;
-                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
-                return;
-            }
-
-            resultCount.textContent = 'Buscando archivos en el servidor...';
-            const response = await fetch('/api/files');
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            
-            if (data.files && data.files.length > 0) {
-                resultCount.textContent = `Indexando ${data.files.length} archivos del servidor...`;
-                searchWorker.postMessage({ type: 'LOAD_FILES', payload: { files: data.files, isLocalFiles: false } });
-            } else {
-                checkExistingDB();
-            }
-        } catch (error) {
-            console.log('Servidor no detectado o carpeta vacía, usando base de datos local existente.');
-            checkExistingDB();
-        }
-    }
-
-    async function checkExistingDB() {
-        // We can use Dexie here too to check if we have data
-        const db = new Dexie("ArchivoDB");
-        db.version(2).stores({ records: '++id, file, sheet, row, titulo, autor, isbn, estado, *searchWords' });
-        const count = await db.records.count();
-        if (count > 0) {
-            isWorkerReady = true;
-            resultCount.textContent = `Base de datos local cargada: ${count} registros.`;
-            performSearch("");
-        } else {
-            resultCount.textContent = 'No hay datos. Haz clic en "Importar Archivos" para empezar.';
-        }
-    }
-
-    // Refresh Data button
-    refreshBtn.addEventListener('click', () => {
-        if (refreshBtn.classList.contains('loading')) return;
-        
-        refreshBtn.classList.add('loading');
-        resultCount.textContent = 'Actualizando archivos...';
-        initData();
-    });
-
-    // Rebuild Index button
-    rebuildIndexBtn.addEventListener('click', async () => {
-        if (rebuildIndexBtn.classList.contains('loading')) return;
-        
-        rebuildIndexBtn.classList.add('loading');
-        resultCount.textContent = 'Generando índice JSON en servidor (un momento)...';
-        
-        try {
-            const response = await fetch('/api/rebuild-index', { method: 'POST' });
-            const data = await response.json();
-            
-            if (data.success) {
-                resultCount.textContent = `¡Hecho! ${data.count} registros optimizados. Cargando...`;
-                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
-            } else {
-                throw new Error(data.error);
-            }
-        } catch (error) {
-            console.error(error);
-            resultCount.textContent = 'Error al optimizar: ' + error.message;
-        } finally {
-            rebuildIndexBtn.classList.remove('loading');
-        }
-    });
-
-    function performSearch(query) {
-        if (!query || !isWorkerReady) return;
-        currentQuery = query;
-
-        // Check cache
-        if (searchCache[query]) {
-            allResults = searchCache[query];
-            renderInitialResults();
-            return;
-        }
-
-        // Show loading state
-        resultsContainer.innerHTML = '<div class="spinner"></div>';
-        resultCount.textContent = 'Buscando en registros locales...';
-
-        // Send search request to worker
-        searchWorker.postMessage({ type: 'SEARCH', payload: { query } });
+    function updateFileFilter(files) {
+        const current = filterFile.value;
+        filterFile.innerHTML = '<option value="">Todos los archivos</option>';
+        [...new Set(files)].sort().forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f;
+            opt.textContent = f;
+            filterFile.appendChild(opt);
+        });
+        filterFile.value = current;
     }
 
     function performSearch(query) {
@@ -197,359 +165,160 @@ document.addEventListener('DOMContentLoaded', () => {
         hasMoreResults = true;
         isLoadingMore = true;
 
-        resultsContainer.innerHTML = '<div class="spinner"></div>';
-        resultCount.textContent = 'Consultando base de datos...';
+        const filters = {
+            year: filterYear.value.trim(),
+            file: filterFile.value,
+            doc: filterDoc.value.trim()
+        };
 
+        resultsContainer.innerHTML = '<div class="spinner"></div>';
         searchWorker.postMessage({ 
             type: 'SEARCH', 
-            payload: { query, offset: 0, limit: CHUNK_SIZE } 
+            payload: { query, filters, offset: 0, limit: CHUNK_SIZE } 
         });
     }
 
-    function showNoResults() {
-        resultsContainer.innerHTML = `
-            <div class="empty-state">
-                <p>No se encontraron registros para "<strong>${escapeHTML(currentQuery)}</strong>"</p>
-            </div>
-        `;
-        resultCount.textContent = '0 resultados';
+    function renderNextChunk() {
+        if (!isWorkerReady || isLoadingMore || !hasMoreResults) return;
+        isLoadingMore = true;
+        
+        const filters = {
+            year: filterYear.value.trim(),
+            file: filterFile.value,
+            doc: filterDoc.value.trim()
+        };
+
+        searchWorker.postMessage({ 
+            type: 'SEARCH', 
+            payload: { query: currentQuery, filters, offset: currentRenderIndex, limit: CHUNK_SIZE } 
+        });
     }
 
     function appendResults(results) {
         const fragment = document.createDocumentFragment();
         results.forEach((record, i) => {
-            const card = createRecordCard(record, currentRenderIndex + i);
-            fragment.appendChild(card);
+            fragment.appendChild(createRecordCard(record, currentRenderIndex + i));
         });
         resultsContainer.appendChild(fragment);
     }
 
-    function renderNextChunk() {
-        if (!isWorkerReady || isLoadingMore || !hasMoreResults) return;
-        
-        isLoadingMore = true;
-        searchWorker.postMessage({ 
-            type: 'SEARCH', 
-            payload: { query: currentQuery, offset: currentRenderIndex, limit: CHUNK_SIZE } 
-        });
-    }
-
-    function setupInfiniteScroll() {
-        // Remove existing sentinel if any
-        const oldSentinel = document.getElementById('loadMoreSentinel');
-        if (oldSentinel) oldSentinel.remove();
-
-        const sentinel = document.createElement('div');
-        sentinel.id = 'loadMoreSentinel';
-        sentinel.style.height = '20px';
-        sentinel.style.margin = '20px 0';
-        resultsContainer.appendChild(sentinel);
-
-        const observer = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting && hasMoreResults && !isLoadingMore) {
-                renderNextChunk();
-            }
-        }, { rootMargin: '400px' });
-
-        observer.observe(sentinel);
-    }
-
     function createRecordCard(record, index) {
         const meta = record.__meta;
-        const isSpreadsheet = meta.type === 'spreadsheet';
-        
         const displayData = { ...record };
         delete displayData.__meta;
 
         const card = document.createElement('div');
         card.className = 'record-card';
-        // Only animate first few to avoid heavy layout work
-        if (index < 20) {
-            card.style.animationDelay = `${(index % 20) * 0.05}s`;
-        } else {
-            card.style.animation = 'none';
-            card.style.opacity = '1';
-            card.style.transform = 'none';
+        
+        // Image logic
+        let imageSrc = null;
+        for (const [key, val] of Object.entries(displayData)) {
+            const lowKey = key.toLowerCase();
+            if ((lowKey.includes('foto') || lowKey.includes('imagen') || lowKey.includes('ruta')) && val) {
+                const cleanVal = String(val).trim();
+                imageSrc = (cleanVal.includes('/') || cleanVal.includes('\\')) 
+                    ? `/api/file?path=${encodeURIComponent(cleanVal)}`
+                    : `/imagenes/${encodeURIComponent(cleanVal)}`;
+                break;
+            }
+        }
+        if (!imageSrc) {
+            const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte'];
+            for (const [key, val] of Object.entries(displayData)) {
+                if (imgKeys.some(k => key.toLowerCase().includes(k)) && val) {
+                    imageSrc = `/imagenes/${encodeURIComponent(String(val).trim())}.jpg`;
+                    break;
+                }
+            }
+        }
+
+        let imgHTML = '';
+        if (imageSrc) {
+            imgHTML = `
+                <div class="card-auto-image">
+                    <img src="${imageSrc}" 
+                         onerror="if(this.src.includes('.jpg')) this.src=this.src.replace('.jpg','.png'); else this.parentElement.style.display='none';"
+                         onclick="window.open(this.src, '_blank')">
+                </div>`;
         }
 
         let gridHTML = '<div class="data-grid">';
         for (const [key, val] of Object.entries(displayData)) {
-            if (val === "" || val === null || val === undefined) continue;
-            const highlightedValue = highlightText(String(val), currentQuery);
+            if (!val) continue;
             gridHTML += `
                 <div class="data-group">
                     <span class="data-label">${escapeHTML(key)}</span>
-                    <span class="data-value">${highlightedValue}</span>
-                </div>
-            `;
+                    <span class="data-value">${highlightText(String(val), currentQuery)}</span>
+                </div>`;
         }
         gridHTML += '</div>';
 
-        const fileIcon = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-                <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-        `;
-
-        let locationInfo = '';
-        let hasPhoto = false;
-
-        if (isSpreadsheet && meta.row) {
-            const matchingCols = [];
-            Object.entries(displayData).forEach(([key, val]) => {
-                const stringVal = String(val).toLowerCase();
-                const stringKey = String(key).toLowerCase();
-
-                if (stringKey.includes('foto') || stringKey.includes('imagen') || stringVal.includes('http')) {
-                    if (val && stringVal !== "" && !stringVal.includes('[error')) {
-                        hasPhoto = true;
-                    }
-                }
-
-                if (stringVal.includes(currentQuery.toLowerCase())) {
-                    const colIdx = meta.headers ? meta.headers.indexOf(key) : -1;
-                    if (colIdx !== -1) {
-                        matchingCols.push(colToLetter(colIdx));
-                    }
-                }
-            });
-            
-            const sheetLabel = meta.sheet ? `Hoja: ${meta.sheet} - ` : '';
-            const photoBadge = hasPhoto ? '<span class="photo-badge" title="Este registro tiene una foto o enlace">📷 FOTO</span>' : '';
-            
-            // Smart Image Matching: Try to find an image named after the record's primary fields
-            let autoImgHTML = '';
-            const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte', 'expediente'];
-            let imgFound = false;
-            
-            for (const [key, val] of Object.entries(displayData)) {
-                if (imgFound) break;
-                const lowKey = key.toLowerCase();
-                if (imgKeys.some(k => lowKey.includes(k)) && val && String(val).trim().length > 1) {
-                    const cleanVal = String(val).trim();
-                    autoImgHTML = `
-                        <div class="card-auto-image">
-                            <img src="/imagenes/${encodeURIComponent(cleanVal)}.jpg" 
-                                 onerror="if(!this.src.includes('.png')) { this.src=this.src.replace('.jpg', '.png'); } else { this.parentElement.style.display='none'; }"
-                                 onclick="window.open(this.src, '_blank')"
-                                 alt="Imagen de ${cleanVal}">
-                        </div>
-                    `;
-                    imgFound = true;
-                }
-            }
-
-            locationInfo = `<div class="card-location">📍 ${sheetLabel}Fila: ${meta.row} ${photoBadge}</div>`;
-            
-            card.innerHTML = `
-                <div class="card-content-wrapper">
-                    ${autoImgHTML}
-                    <div class="card-main-info">
-                        <div class="card-header">
-                            <span class="card-source" title="Archivo: ${escapeHTML(meta.file)}">
-                                ${fileIcon} ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table)}
-                            </span>
-                            ${locationInfo}
-                        </div>
-                        ${gridHTML}
-                    </div>
-                </div>
-            `;
-            return card;
-        } else if (meta.row) {
-            const typeLabel = meta.table ? `Tabla: ${meta.table} - ` : (meta.sheet ? `Hoja: ${meta.sheet} - ` : '');
-            locationInfo = `<div class="card-location">📍 ${typeLabel}Fila: ${meta.row}</div>`;
-        }
-
         card.innerHTML = `
-            <div class="card-header">
-                <span class="card-source" title="Archivo: ${escapeHTML(meta.file)}">
-                    ${fileIcon} ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table)}
-                </span>
-                ${locationInfo}
-            </div>
-            ${gridHTML}
-        `;
-
+            <div class="card-content-wrapper">
+                ${imgHTML}
+                <div class="card-main-info">
+                    <div class="card-header">
+                        <span class="card-source">📄 ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table)}</span>
+                        <div class="card-location">📍 Fila: ${meta.row}</div>
+                    </div>
+                    ${gridHTML}
+                </div>
+            </div>`;
         return card;
     }
 
-    // Keep original renderResults but it's now mostly unused or can be removed
-    // I'll keep the utilities below...
+    function setupInfiniteScroll() {
+        const old = document.getElementById('loadMoreSentinel');
+        if (old) old.remove();
+        const sentinel = document.createElement('div');
+        sentinel.id = 'loadMoreSentinel';
+        sentinel.style.height = '1px';
+        resultsContainer.appendChild(sentinel);
 
-    function showEmptyState() {
-        resultsContainer.innerHTML = `
-            <div class="empty-state" id="emptyState">
-                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.</p>
-            </div>
-        `;
-        resultCount.textContent = 'Escriba para empezar a buscar.';
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && hasMoreResults && !isLoadingMore) renderNextChunk();
+        }, { rootMargin: '400px' });
+        observer.observe(sentinel);
     }
 
-    // Utilities
-    function colToLetter(col) {
-        let letter = "";
-        while (col >= 0) {
-            letter = String.fromCharCode((col % 26) + 65) + letter;
-            col = Math.floor(col / 26) - 1;
-        }
-        return letter;
-    }
-
-    function escapeHTML(str) {
-        return str.replace(/[&<>'"]/g, 
-            tag => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                "'": '&#39;',
-                '"': '&quot;'
-            }[tag] || tag)
-        );
+    function showNoResults() {
+        resultsContainer.innerHTML = `<div class="empty-state"><p>No se encontraron registros.</p></div>`;
     }
 
     function highlightText(text, query) {
-        if (!text) return "";
-        let content = String(text).trim();
-        
-        // Check if it's a URL
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
-        if (urlRegex.test(content) && content.length < 500) {
-             // If it's JUST a URL, return a nice button
-             if (content.match(/^https?:\/\/[^\s]+$/)) {
-                 return `<a href="${content}" target="_blank" class="data-link">Abrir enlace 🔗</a>`;
-             }
-             // If it contains a URL, replace it with a link
-             content = content.replace(urlRegex, (url) => `<a href="${url}" target="_blank" class="text-link">${url}</a>`);
-        }
-
-        // Detect if it's a file path (and not a long text)
-        if (isFilePath(content) && content.length < 300) {
-            return renderPathThumbnail(content, query);
-        }
-
-        let escapedContent = content.includes('<a') ? content : escapeHTML(content);
-        if (!query) return escapedContent;
-        
-        // Escape characters for regex
-        const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(${safeQuery})`, 'gi');
-        
-        // Find matches and escape HTML properly, but avoid breaking existing links if we injected them
-        if (content.includes('<a')) {
-            // Complex case: highlight only outside tags
-            return escapedContent; // For now skip highlighting in complex HTML to avoid breakage
-        }
-
-        return escapedContent.replace(regex, (match) => `<span class="highlight">${match}</span>`);
+        if (!query) return escapeHTML(text);
+        const words = query.split(/\s+/).filter(w => w.length > 2);
+        let html = escapeHTML(text);
+        words.forEach(word => {
+            const regex = new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            html = html.replace(regex, '<mark>$1</mark>');
+        });
+        return html;
     }
 
-
-    function isFilePath(str) {
-        if (typeof str !== 'string' || str.length < 3) return false;
-        if (str.startsWith('http')) return false;
-
-        // Basic path detection: starts with C:\, C:/, //, /, ./, or ../
-        const pathRegex = /^([a-zA-Z]:[\\/]|\\\\|\/|\.\/|\.\.\\)/;
-
-        const extensionRegex = /\.(jpg|jpeg|png|gif|webp|pdf|docx|xlsx|xls|txt|csv|ods|accdb|mdb|zip|rar|mp4|mov|pptx|html)$/i;
-        
-        // Also check if it's just a filename with an image extension (often found in excel columns)
-        const isJustImageFile = extensionRegex.test(str) && !str.includes(' ') && str.length < 50;
-
-        return pathRegex.test(str) || (extensionRegex.test(str) && (str.includes('\\') || str.includes('/'))) || isJustImageFile;
+    function escapeHTML(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 
-
-    function renderPathThumbnail(pathStr, query) {
-        const fileName = pathStr.split(/[\\/]/).pop();
-        const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
-        const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension);
-        
-        // Determine the best source for the image
-        let imgSrc = null;
-        if (isImage) {
-            if (pathStr.includes('\\') || pathStr.includes('/') || pathStr.includes(':')) {
-                // It's a path, use the file proxy
-                imgSrc = `/api/file?path=${encodeURIComponent(pathStr)}`;
-            } else {
-                // It's just a filename, look in the /imagenes folder
-                imgSrc = `/imagenes/${encodeURIComponent(pathStr)}`;
-            }
-        }
-        
-        const previewUrl = isImage ? imgSrc : `/api/file?path=${encodeURIComponent(pathStr)}`;
-        const openUrl = `/api/open-file?path=${encodeURIComponent(pathStr)}`;
-        
-        const fileIcon = `
-            <svg class="file-icon-placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                <polyline points="13 2 13 9 20 9"></polyline>
-            </svg>
-        `;
-
-        return `
-            <div class="path-thumbnail-container" onclick="if(event.target.tagName !== 'BUTTON' && event.target.tagName !== 'A') window.open('${previewUrl}', '_blank')">
-                <div class="thumbnail-wrapper" title="Hacer clic para previsualizar">
-                    ${isImage ? `
-                        <img src="${imgSrc}" 
-                             alt="${escapeHTML(fileName)}" 
-                             class="thumbnail-img" 
-                             onload="this.classList.add('loaded')"
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
-                        <div style="display:none">${fileIcon}</div>
-                    ` : fileIcon}
-                </div>
-                <div class="file-info">
-                    <span class="file-name" title="Hacer clic para previsualizar">${highlightTextRaw(fileName, query)}</span>
-                    <span class="file-type">${extension || 'archivo'}</span>
-                    <div class="path-actions">
-                        <a href="${previewUrl}" target="_blank" class="path-link">Previsualizar</a>
-                        <button onclick="openLocally(event, '${pathStr}')" class="path-button" title="Abrir con el programa del sistema">Abrir en PC 💻</button>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    // New helper for opening local files with feedback
-    window.openLocally = async (event, path) => {
-        event.stopPropagation();
-        const btn = event.currentTarget;
-        const originalText = btn.innerHTML;
-        
+    async function initData() {
         try {
-            btn.innerHTML = 'Abriendo...';
-            btn.style.opacity = '0.7';
-            const response = await fetch(`/api/open-file?path=${encodeURIComponent(path)}`);
-            if (!response.ok) throw new Error();
-            
-            btn.innerHTML = '¡Abierto! ✅';
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.style.opacity = '1';
-            }, 2000);
+            const resp = await fetch('/api/index-status');
+            const status = await resp.json();
+            if (status.exists) {
+                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
+            } else {
+                const fResp = await fetch('/api/files');
+                const fData = await fResp.json();
+                if (fData.files?.length > 0) {
+                    searchWorker.postMessage({ type: 'LOAD_FILES', payload: { files: fData.files, isLocalFiles: false } });
+                }
+            }
         } catch (e) {
-            btn.innerHTML = 'Error ❌';
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.style.opacity = '1';
-            }, 2000);
+            console.error(e);
         }
-    };
-
-
-
-    function highlightTextRaw(text, query) {
-        if (!text) return "";
-        let escaped = escapeHTML(String(text));
-        if (!query) return escaped;
-        const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(${safeQuery})`, 'gi');
-        return escaped.replace(regex, (match) => `<span class="highlight">${match}</span>`);
     }
+
+    initData();
 });
