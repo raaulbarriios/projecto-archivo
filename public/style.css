@@ -230,6 +230,50 @@ header p {
     transform: translateY(20px);
 }
 
+.card-content-wrapper {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.card-auto-image {
+    flex-shrink: 0;
+    width: 120px;
+    height: 150px;
+    background: #f7fafc;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #edf2f7;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.card-auto-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+}
+
+.card-auto-image img:hover {
+    transform: scale(1.1);
+}
+
+.card-main-info {
+    flex-grow: 1;
+    min-width: 0; /* Prevents overflow in flex */
+}
+
+@media (max-width: 600px) {
+    .card-content-wrapper {
+        flex-direction: column;
+    }
+    .card-auto-image {
+        width: 100%;
+        height: 200px;
+    }
+}
+
 .record-card:hover {
     transform: translateY(-5px);
     border-color: rgba(102, 252, 241, 0.3);

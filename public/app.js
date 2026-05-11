@@ -272,6 +272,29 @@ document.addEventListener('DOMContentLoaded', () => {
             card.style.transform = 'none';
         }
 
+        let gridHTML = '<div class="data-grid">';
+        for (const [key, val] of Object.entries(displayData)) {
+            if (val === "" || val === null || val === undefined) continue;
+            const highlightedValue = highlightText(String(val), currentQuery);
+            gridHTML += `
+                <div class="data-group">
+                    <span class="data-label">${escapeHTML(key)}</span>
+                    <span class="data-value">${highlightedValue}</span>
+                </div>
+            `;
+        }
+        gridHTML += '</div>';
+
+        const fileIcon = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+        `;
+
         let locationInfo = '';
         let hasPhoto = false;
 
@@ -298,34 +321,49 @@ document.addEventListener('DOMContentLoaded', () => {
             const sheetLabel = meta.sheet ? `Hoja: ${meta.sheet} - ` : '';
             const photoBadge = hasPhoto ? '<span class="photo-badge" title="Este registro tiene una foto o enlace">📷 FOTO</span>' : '';
             
+            // Smart Image Matching: Try to find an image named after the record's primary fields
+            let autoImgHTML = '';
+            const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte', 'expediente'];
+            let imgFound = false;
+            
+            for (const [key, val] of Object.entries(displayData)) {
+                if (imgFound) break;
+                const lowKey = key.toLowerCase();
+                if (imgKeys.some(k => lowKey.includes(k)) && val && String(val).trim().length > 1) {
+                    const cleanVal = String(val).trim();
+                    autoImgHTML = `
+                        <div class="card-auto-image">
+                            <img src="/imagenes/${encodeURIComponent(cleanVal)}.jpg" 
+                                 onerror="if(!this.src.includes('.png')) { this.src=this.src.replace('.jpg', '.png'); } else { this.parentElement.style.display='none'; }"
+                                 onclick="window.open(this.src, '_blank')"
+                                 alt="Imagen de ${cleanVal}">
+                        </div>
+                    `;
+                    imgFound = true;
+                }
+            }
+
             locationInfo = `<div class="card-location">📍 ${sheetLabel}Fila: ${meta.row} ${photoBadge}</div>`;
+            
+            card.innerHTML = `
+                <div class="card-content-wrapper">
+                    ${autoImgHTML}
+                    <div class="card-main-info">
+                        <div class="card-header">
+                            <span class="card-source" title="Archivo: ${escapeHTML(meta.file)}">
+                                ${fileIcon} ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table)}
+                            </span>
+                            ${locationInfo}
+                        </div>
+                        ${gridHTML}
+                    </div>
+                </div>
+            `;
+            return card;
         } else if (meta.row) {
             const typeLabel = meta.table ? `Tabla: ${meta.table} - ` : (meta.sheet ? `Hoja: ${meta.sheet} - ` : '');
             locationInfo = `<div class="card-location">📍 ${typeLabel}Fila: ${meta.row}</div>`;
         }
-
-        let gridHTML = '<div class="data-grid">';
-        for (const [key, val] of Object.entries(displayData)) {
-            if (val === "" || val === null || val === undefined) continue;
-            const highlightedValue = highlightText(String(val), currentQuery);
-            gridHTML += `
-                <div class="data-group">
-                    <span class="data-label">${escapeHTML(key)}</span>
-                    <span class="data-value">${highlightedValue}</span>
-                </div>
-            `;
-        }
-        gridHTML += '</div>';
-
-        const fileIcon = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-                <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-        `;
 
         card.innerHTML = `
             <div class="card-header">
