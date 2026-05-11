@@ -127,10 +127,19 @@ onmessage = async function(e) {
         return record;
     }
 
+    const normalizeText = (str) => {
+        if (!str) return "";
+        return String(str)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    };
+
     if (type === 'SEARCH') {
         const { query, filters, offset = 0, limit = 50 } = payload;
-        const lowerQuery = query.toLowerCase().trim();
-        const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 2);
+        const normQuery = normalizeText(query);
+        const queryWords = normQuery.split(/\s+/).filter(w => w.length > 2);
         
         try {
             let queryChain = db.records;
@@ -148,22 +157,22 @@ onmessage = async function(e) {
                     });
                 }
                 if (filters.doc) {
-                    const docStr = filters.doc.toLowerCase();
+                    const normDoc = normalizeText(filters.doc);
                     queryChain = queryChain.filter(r => {
-                        const rowText = Object.values(r.data).join(' ').toLowerCase();
-                        return rowText.includes(docStr);
+                        const rowText = normalizeText(Object.values(r.data).join(' '));
+                        return rowText.includes(normDoc);
                     });
                 }
             }
 
             let results = [];
-            if (!lowerQuery) {
+            if (!normQuery) {
                 results = await queryChain.offset(offset).limit(limit).toArray();
             } else {
                 // Combine multi-word search with query chain
                 results = await queryChain
                     .filter(r => {
-                        const allText = Object.values(r.data).join(' ').toLowerCase();
+                        const allText = normalizeText(Object.values(r.data).join(' '));
                         return queryWords.every(qw => allText.includes(qw));
                     })
                     .offset(offset)

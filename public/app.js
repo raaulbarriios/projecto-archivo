@@ -287,11 +287,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function highlightText(text, query) {
         if (!query) return escapeHTML(text);
-        const words = query.split(/\s+/).filter(w => w.length > 2);
         let html = escapeHTML(text);
+        
+        const accentMap = {
+            'a': '[aáàäâ]',
+            'e': '[eéèëê]',
+            'i': '[iíìïî]',
+            'o': '[oóòöô]',
+            'u': '[uúùüû]',
+            'n': '[nñ]'
+        };
+
+        const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        
         words.forEach(word => {
-            const regex = new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-            html = html.replace(regex, '<mark>$1</mark>');
+            // Create a regex that is accent-insensitive
+            let pattern = "";
+            for (let char of word) {
+                pattern += accentMap[char] || char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+            try {
+                const regex = new RegExp(`(${pattern})`, 'gi');
+                html = html.replace(regex, '<mark>$1</mark>');
+            } catch(e) {}
         });
         return html;
     }
