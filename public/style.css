@@ -742,42 +742,8 @@ header p {
     background: rgba(102, 252, 241, 0.05);
 }
 
-.save-sidebar-btn {
-    margin-top: 1rem;
-    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
-    color: #0b0c10;
-    border: none;
-    padding: 1rem;
-    border-radius: 10px;
-    font-weight: 800;
-    cursor: pointer;
-    transition: var(--transition);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
 
-.save-sidebar-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 252, 241, 0.3);
-}
-
-.save-sidebar-btn.success {
-    background: #48bb78;
-    color: white;
-}
-
-.sidebar-details-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-}
-
-.sidebar-divider {
-    margin: 2.5rem 0;
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
+/* Sidebar Data Display */
 .sidebar-data-group {
     padding-bottom: 0.8rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.02);
@@ -817,4 +783,56 @@ header p {
 .emoji-note-btn:hover {
     background: var(--accent);
     transform: scale(1.1);
+}
+/* Sidebar Import Zone */
+.sidebar-import-zone {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: rgba(102, 252, 241, 0.03);
+    border: 1px dashed rgba(102, 252, 241, 0.2);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.import-help {
+    margin-top: 0.8rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.import-sidebar-btn {
+    width: 100%;
+    background: rgba(102, 252, 241, 0.1);
+    border: 1px solid rgba(102, 252, 241, 0.2);
+    color: var(--accent);
+    padding: 0.8rem;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.import-sidebar-btn:hover {
+    background: var(--accent);
+    color: #0b0c10;
+}
+
+.spinner-mini {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(102, 252, 241, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--accent);
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

@@ -177,6 +177,18 @@ document.addEventListener('DOMContentLoaded', () => {
         currentQuery = query;
         currentRenderIndex = 0;
         hasMoreResults = true;
+
+        if (!query && !filterYear.value.trim() && !filterFile.value && !filterDoc.value.trim()) {
+            resultsContainer.innerHTML = '';
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) {
+                resultsContainer.appendChild(emptyState);
+                emptyState.classList.remove('hidden');
+            }
+            resultCount.textContent = 'Ingrese un término para buscar.';
+            return;
+        }
+
         isLoadingMore = true;
 
         const filters = {
@@ -324,39 +336,82 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="sidebar-field">
                     <label>${field}</label>
                     ${isLong 
-                        ? `<textarea data-field="${field}" placeholder="Completar ${field.toLowerCase()}...">${escapeHTML(val)}</textarea>`
-                        : `<input type="text" data-field="${field}" value="${escapeHTML(val)}" placeholder="Completar ${field.toLowerCase()}...">`
+                        ? `<textarea data-field="${field}" readonly placeholder="(Importar archivo para completar)">${escapeHTML(val)}</textarea>`
+                        : `<input type="text" data-field="${field}" readonly value="${escapeHTML(val)}" placeholder="(Importar archivo para completar)">`
                     }
                 </div>`;
         });
         formHTML += `
-            <button class="save-sidebar-btn" onclick="window.saveNote('${id.replace(/'/g, "\\'")}', this)">Guardar Información</button>
+            <div class="sidebar-import-zone">
+                <input type="file" id="sidebarFileInput" style="display:none" accept=".txt,.json,.xlsx,.xls,.csv,.ods,.docx,.odt">
+                <button class="import-sidebar-btn" onclick="document.getElementById('sidebarFileInput').click()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 8px;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Importar Ficha (Word/Excel/TXT)
+                </button>
+                <p class="import-help">Soporta: XLSX, CSV, ODS, DOCX, ODT, TXT</p>
+            </div>
         </div>`;
-
-        let detailsHTML = '<div class="sidebar-details-grid">';
-        for (const [key, val] of Object.entries(record)) {
-            if (key === '__meta' || !val) continue;
-            detailsHTML += `
-                <div class="sidebar-data-group">
-                    <span class="sidebar-data-label">${escapeHTML(key)}</span>
-                    <span class="sidebar-data-value">${escapeHTML(String(val))}</span>
-                </div>`;
-        }
-        detailsHTML += '</div>';
 
         sidebarBody.innerHTML = `
             <div class="sidebar-section">
                 <h3>Ficha de Descripción:</h3>
                 ${formHTML}
             </div>
-            <hr class="sidebar-divider">
-            <div class="sidebar-section">
-                <h3>Datos Originales:</h3>
-                ${detailsHTML}
-            </div>
         `;
         
         notesSidebar.classList.add('open');
+        
+        // Handle sidebar file import
+        const fileInput = document.getElementById('sidebarFileInput');
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const btn = document.querySelector('.import-sidebar-btn');
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-mini"></span> Procesando...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const parseResp = await fetch('/api/parse-sidebar-file', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!parseResp.ok) throw new Error("Error parsing file");
+                
+                const { data: parsedFields } = await parseResp.json();
+                const newData = { ...recordNotes[id], ...parsedFields };
+
+                // Auto-save to server
+                const saveResp = await fetch('/api/save-note', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, note: newData })
+                });
+                
+                if (saveResp.ok) {
+                    recordNotes[id] = newData;
+                    // Refresh UI
+                    openSidebar(id, record);
+                    alert("Ficha importada y guardada correctamente.");
+                }
+            } catch (err) {
+                alert("Error al procesar el archivo. Asegúrate de que el formato sea legible.");
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
+                fileInput.value = '';
+            }
+        };
     };
 
 

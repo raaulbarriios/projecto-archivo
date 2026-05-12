@@ -7,10 +7,15 @@ const MDBReader = require('mdb-reader');
 const { exec, execSync } = require('child_process');
 const multer = require('multer');
 const AdmZip = require('adm-zip');
+const mammoth = require('mammoth');
 
 const NOTES_FILE = path.join(__dirname, 'notes.json');
+const ADJUNTOS_DIR = path.join(__dirname, 'adjuntos');
 if (!fs.existsSync(NOTES_FILE)) {
     fs.writeFileSync(NOTES_FILE, JSON.stringify({}));
+}
+if (!fs.existsSync(ADJUNTOS_DIR)) {
+    fs.mkdirSync(ADJUNTOS_DIR, { recursive: true });
 }
 
 
@@ -259,6 +264,91 @@ app.post('/api/save-note', (req, res) => {
         
         res.json({ success: true });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Attachments endpoints
+const attachmentUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => {
+            const recordId = req.body.recordId;
+            const dest = path.join(ADJUNTOS_DIR, recordId.replace(/[^a-z0-9_-]/gi, '_'));
+            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+            cb(null, dest);
+        },
+        filename: (req, file, cb) => {
+            cb(null, file.originalname);
+        }
+    })
+});
+
+app.post('/api/upload-attachment', attachmentUpload.array('files'), (req, res) => {
+    res.json({ success: true, count: req.files.length });
+});
+
+app.get('/api/attachments/:id', (req, res) => {
+    const recordId = req.params.id.replace(/[^a-z0-9_-]/gi, '_');
+    const dest = path.join(ADJUNTOS_DIR, recordId);
+    if (!fs.existsSync(dest)) return res.json({ files: [] });
+    
+    fs.readdir(dest, (err, files) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ files });
+    });
+});
+
+app.use('/api/adjuntos', express.static(ADJUNTOS_DIR));
+
+app.post('/api/parse-sidebar-file', multer().single('file'), async (req, res) => {
+    try {
+        const file = req.file;
+        if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+        const ext = path.extname(file.originalname).toLowerCase();
+        let text = "";
+
+        if (['.xlsx', '.xls', '.csv', '.ods'].includes(ext)) {
+            const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = xlsx.utils.sheet_to_json(firstSheet, { header: 1 });
+            text = rows.map(row => row.join(' ')).join('\n');
+        } else if (ext === '.docx') {
+            const result = await mammoth.extractRawText({ buffer: file.buffer });
+            text = result.value;
+        } else if (ext === '.odt') {
+            const zip = new AdmZip(file.buffer);
+            const contentXml = zip.readAsText("content.xml");
+            // Simple regex to extract text from ODT XML
+            text = contentXml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+        } else {
+            text = file.buffer.toString('utf8');
+        }
+
+        // Parse text for KEY: Value pairs
+        const data = {};
+        const lines = text.split(/\r?\n/);
+        const fields = [
+            'CODIGO DE REFERENCIA', 'TITULO', 'FECHAS EXTREMAS', 'NIVEL DE DESCRIPCIÓN',
+            'VOLUMEN', 'PRODUCTOR', 'RESUMEN', 'CARACTERISTICAS FÍSICAS',
+            'DESCRIPTORES TOPOGRÁFICOS', 'DESCRIPTORES ONOMÁSTICOS', 'MATERIAS',
+            'NOTAS', 'NOTAS DE PUBLICACIÓN', 'NOTAS DEL ARCHIVERO'
+        ];
+
+        lines.forEach(line => {
+            const sepIndex = line.indexOf(':');
+            if (sepIndex !== -1) {
+                const key = line.substring(0, sepIndex).trim().toUpperCase();
+                const val = line.substring(sepIndex + 1).trim();
+                if (fields.includes(key)) {
+                    data[key] = val;
+                }
+            }
+        });
+
+        res.json({ data });
+    } catch (error) {
+        console.error("Parse Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
