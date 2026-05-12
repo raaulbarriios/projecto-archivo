@@ -692,31 +692,95 @@ header p {
     flex: 1;
 }
 
-.sidebar-note-section h3, .sidebar-info-section h3 {
+.sidebar-section h3 {
     font-size: 0.9rem;
     text-transform: uppercase;
     color: var(--text-secondary);
     letter-spacing: 1px;
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
 }
 
-.sidebar-note-content {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 1.5rem;
-    border-radius: 12px;
-    line-height: 1.6;
+.sidebar-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.sidebar-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.sidebar-field label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.sidebar-field input, .sidebar-field textarea {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 0.8rem;
     color: var(--text-primary);
-    font-size: 1.1rem;
+    font-family: inherit;
+    font-size: 0.95rem;
+    outline: none;
+    transition: var(--transition);
+}
+
+.sidebar-field textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.sidebar-field input:focus, .sidebar-field textarea:focus {
+    border-color: var(--accent);
+    background: rgba(102, 252, 241, 0.05);
+}
+
+.save-sidebar-btn {
+    margin-top: 1rem;
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+    color: #0b0c10;
+    border: none;
+    padding: 1rem;
+    border-radius: 10px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: var(--transition);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.save-sidebar-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 252, 241, 0.3);
+}
+
+.save-sidebar-btn.success {
+    background: #48bb78;
+    color: white;
+}
+
+.sidebar-details-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
 }
 
 .sidebar-divider {
-    margin: 2rem 0;
+    margin: 2.5rem 0;
     border: none;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .sidebar-data-group {
-    margin-bottom: 1.5rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
 }
 
 .sidebar-data-label {

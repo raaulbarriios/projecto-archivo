@@ -298,9 +298,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.openSidebar = (id, record) => {
-        const note = recordNotes[id] || 'No hay notas adicionales para este registro.';
+        const savedData = recordNotes[id] || {};
+        const fields = [
+            'CODIGO DE REFERENCIA',
+            'TITULO',
+            'FECHAS EXTREMAS',
+            'NIVEL DE DESCRIPCIÓN',
+            'VOLUMEN',
+            'PRODUCTOR',
+            'RESUMEN',
+            'CARACTERISTICAS FÍSICAS',
+            'DESCRIPTORES TOPOGRÁFICOS',
+            'DESCRIPTORES ONOMÁSTICOS',
+            'MATERIAS',
+            'NOTAS',
+            'NOTAS DE PUBLICACIÓN',
+            'NOTAS DEL ARCHIVERO'
+        ];
         
-        let detailsHTML = '<div class="sidebar-details">';
+        let formHTML = '<div class="sidebar-form">';
+        fields.forEach(field => {
+            const val = savedData[field] || '';
+            const isLong = field.includes('RESUMEN') || field.includes('CARACTERISTICAS') || field.includes('NOTAS') || field.includes('DESCRIPTORES') || field.includes('MATERIAS');
+            formHTML += `
+                <div class="sidebar-field">
+                    <label>${field}</label>
+                    ${isLong 
+                        ? `<textarea data-field="${field}" placeholder="Completar ${field.toLowerCase()}...">${escapeHTML(val)}</textarea>`
+                        : `<input type="text" data-field="${field}" value="${escapeHTML(val)}" placeholder="Completar ${field.toLowerCase()}...">`
+                    }
+                </div>`;
+        });
+        formHTML += `
+            <button class="save-sidebar-btn" onclick="window.saveNote('${id.replace(/'/g, "\\'")}', this)">Guardar Información</button>
+        </div>`;
+
+        let detailsHTML = '<div class="sidebar-details-grid">';
         for (const [key, val] of Object.entries(record)) {
             if (key === '__meta' || !val) continue;
             detailsHTML += `
@@ -312,13 +345,13 @@ document.addEventListener('DOMContentLoaded', () => {
         detailsHTML += '</div>';
 
         sidebarBody.innerHTML = `
-            <div class="sidebar-note-section">
-                <h3>Notas guardadas:</h3>
-                <div class="sidebar-note-content">${escapeHTML(note)}</div>
+            <div class="sidebar-section">
+                <h3>Ficha de Descripción:</h3>
+                ${formHTML}
             </div>
             <hr class="sidebar-divider">
-            <div class="sidebar-info-section">
-                <h3>Datos completos:</h3>
+            <div class="sidebar-section">
+                <h3>Datos Originales:</h3>
                 ${detailsHTML}
             </div>
         `;
@@ -328,8 +361,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     window.saveNote = async (id, btn) => {
-        // Functionality removed as per user request
-        console.log("Saving functionality disabled.");
+        const container = btn.parentElement;
+        const inputs = container.querySelectorAll('input, textarea');
+        const data = {};
+        inputs.forEach(input => {
+            data[input.dataset.field] = input.value.trim();
+        });
+        
+        btn.disabled = true;
+        btn.textContent = 'Guardando...';
+        
+        try {
+            const response = await fetch('/api/save-note', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, note: data }) // Sending the whole object as 'note'
+            });
+            const resData = await response.json();
+            if (resData.success) {
+                recordNotes[id] = data;
+                btn.textContent = '¡Guardado!';
+                btn.classList.add('success');
+                setTimeout(() => {
+                    btn.textContent = 'Guardar Información';
+                    btn.classList.remove('success');
+                    btn.disabled = false;
+                }, 2000);
+            }
+        } catch (error) {
+            console.error('Error saving note:', error);
+            btn.textContent = 'Error';
+            btn.disabled = false;
+        }
     };
 
     function setupInfiniteScroll() {
