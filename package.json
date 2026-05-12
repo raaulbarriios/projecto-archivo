@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "adm-zip": "^0.5.17",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "mdb-reader": "^1.2.1",

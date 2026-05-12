@@ -4,8 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
 const MDBReader = require('mdb-reader');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const multer = require('multer');
+const AdmZip = require('adm-zip');
 
 const NOTES_FILE = path.join(__dirname, 'notes.json');
 if (!fs.existsSync(NOTES_FILE)) {
@@ -63,7 +64,7 @@ app.get('/api/files', (req, res) => {
         
         const supportedFiles = files.filter(file => {
             const ext = path.extname(file).toLowerCase();
-            return ['.xlsx', '.xls', '.csv', '.ods', '.accdb', '.mdb'].includes(ext);
+            return ['.xlsx', '.xls', '.csv', '.ods', '.accdb', '.mdb', '.odb'].includes(ext);
         });
         
         res.json({ files: supportedFiles });
@@ -122,6 +123,44 @@ app.post('/api/rebuild-index', (req, res) => {
                             });
                         });
                     });
+                } else if (['.odb'].includes(ext)) {
+                    console.log(`Processing LibreOffice Base: ${file}`);
+                    const tempDir = path.join(__dirname, 'temp_odb_' + Date.now());
+                    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+                    
+                    const zip = new AdmZip(filePath);
+                    zip.extractAllTo(tempDir, true);
+                    
+                    const dbFolderPath = path.join(tempDir, 'database');
+                    if (fs.existsSync(dbFolderPath)) {
+                        const scriptPath = path.join(dbFolderPath, 'script');
+                        const propertiesPath = path.join(dbFolderPath, 'properties');
+                        const dataPath = path.join(dbFolderPath, 'data');
+                        const backupPath = path.join(dbFolderPath, 'backup');
+                        
+                        if (fs.existsSync(scriptPath)) fs.renameSync(scriptPath, path.join(dbFolderPath, 'db.script'));
+                        if (fs.existsSync(propertiesPath)) fs.renameSync(propertiesPath, path.join(dbFolderPath, 'db.properties'));
+                        if (fs.existsSync(dataPath)) fs.renameSync(dataPath, path.join(dbFolderPath, 'db.data'));
+                        if (fs.existsSync(backupPath)) fs.renameSync(backupPath, path.join(dbFolderPath, 'db.backup'));
+                        
+                        const javaCmd = `java -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -cp "lib/hsqldb.jar;." ReadOdb "${path.join(dbFolderPath, 'db')}"`;
+                        try {
+                            const rawBuffer = execSync(javaCmd, { cwd: __dirname, encoding: 'buffer', maxBuffer: 1024 * 1024 * 50 });
+                            const output = rawBuffer.toString('utf8');
+                            const tablesData = JSON.parse(output);
+                            tablesData.forEach((rowObj, index) => {
+                                allRecords.push({
+                                    file: file,
+                                    sheet: rowObj.table,
+                                    row: index + 1,
+                                    data: rowObj.data
+                                });
+                            });
+                        } catch (err) {
+                            console.error(`Error running Java for ${file}:`, err.message);
+                        }
+                    }
+                    fs.rmSync(tempDir, { recursive: true, force: true });
                 }
             } catch (fileError) {
                 console.error(`Error processing file ${file}:`, fileError);

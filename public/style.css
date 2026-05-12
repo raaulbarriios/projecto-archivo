@@ -455,6 +455,7 @@ header p {
     color: var(--text-primary);
     font-weight: 500;
     word-break: break-word;
+    white-space: pre-wrap;
 }
 
 /* Match highlighting */
@@ -729,6 +730,8 @@ header p {
 .sidebar-data-value {
     font-size: 1rem;
     color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* Emoji Button */
