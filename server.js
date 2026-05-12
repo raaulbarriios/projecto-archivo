@@ -7,6 +7,12 @@ const MDBReader = require('mdb-reader');
 const { exec } = require('child_process');
 const multer = require('multer');
 
+const NOTES_FILE = path.join(__dirname, 'notes.json');
+if (!fs.existsSync(NOTES_FILE)) {
+    fs.writeFileSync(NOTES_FILE, JSON.stringify({}));
+}
+
+
 
 
 const storage = multer.diskStorage({
@@ -190,6 +196,31 @@ app.get('/api/open-file', (req, res) => {
         });
     } else {
         res.status(404).send('File or folder not found: ' + fullPath);
+    }
+});
+
+// Notes endpoints
+app.get('/api/notes', (req, res) => {
+    try {
+        const notes = JSON.parse(fs.readFileSync(NOTES_FILE, 'utf8'));
+        res.json(notes);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/save-note', (req, res) => {
+    try {
+        const { id, note } = req.body;
+        if (!id) return res.status(400).json({ error: "Missing record ID" });
+        
+        const notes = JSON.parse(fs.readFileSync(NOTES_FILE, 'utf8'));
+        notes[id] = note;
+        fs.writeFileSync(NOTES_FILE, JSON.stringify(notes, null, 2));
+        
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 

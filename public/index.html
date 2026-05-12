@@ -105,14 +105,27 @@
         </section>
 
         <section class="results-section" id="resultsContainer">
-            <!-- Los resultados aparecerán aquí -->
             <div class="empty-state" id="emptyState">
                 <div class="empty-icon"></div>
-                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.
-                </p>
+                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.</p>
             </div>
         </section>
     </main>
+
+    <!-- Sidebar for Notes -->
+    <div id="notesSidebar" class="sidebar">
+        <div class="sidebar-content">
+            <div class="sidebar-header">
+                <h2>Detalles y Notas</h2>
+                <button id="closeSidebar" class="close-btn">&times;</button>
+            </div>
+            <div id="sidebarBody" class="sidebar-body">
+                <!-- Note content will be injected here -->
+            </div>
+        </div>
+        <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 

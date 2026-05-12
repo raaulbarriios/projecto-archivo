@@ -7,6 +7,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const rebuildIndexBtn = document.getElementById('rebuildIndexBtn');
     const importBtn = document.getElementById('importBtn');
     const fileInput = document.getElementById('fileInput');
+    const notesSidebar = document.getElementById('notesSidebar');
+    const sidebarBody = document.getElementById('sidebarBody');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+
 
     // State variables
     let currentRenderIndex = 0;
@@ -16,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isLoadingMore = false;
     let hasMoreResults = true;
     let debounceTimer;
+    let recordNotes = {}; // To store fetched notes
 
     // Advanced Search Logic
     const advancedSearchToggle = document.getElementById('advancedSearchToggle');
@@ -57,6 +63,14 @@ document.addEventListener('DOMContentLoaded', () => {
         clearBtn.classList.add('hidden');
         performSearch("");
     });
+    
+    // Sidebar closing
+    [closeSidebar, sidebarOverlay].forEach(el => {
+        el.addEventListener('click', () => {
+            notesSidebar.classList.remove('open');
+        });
+    });
+
 
     refreshBtn.addEventListener('click', () => {
         if (refreshBtn.classList.contains('loading')) return;
@@ -253,6 +267,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         gridHTML += '</div>';
 
+        const recordId = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`;
+        const existingNote = recordNotes[recordId] || '';
+
+        let notesHTML = '';
+        if (imageSrc) {
+            notesHTML = `
+                <div class="notes-container-mini">
+                    <button class="emoji-note-btn" title="Ver notas" onclick="window.openSidebar('${recordId.replace(/'/g, "\\'")}', ${JSON.stringify(record).replace(/"/g, '&quot;')})">
+                        📝
+                    </button>
+                </div>`;
+        }
+
         card.innerHTML = `
             <div class="card-content-wrapper">
                 ${imgHTML}
@@ -262,10 +289,46 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="card-location">📍 Fila: ${meta.row}</div>
                     </div>
                     ${gridHTML}
+                    ${notesHTML}
                 </div>
             </div>`;
         return card;
     }
+
+    window.openSidebar = (id, record) => {
+        const note = recordNotes[id] || 'No hay notas adicionales para este registro.';
+        
+        let detailsHTML = '<div class="sidebar-details">';
+        for (const [key, val] of Object.entries(record)) {
+            if (key === '__meta' || !val) continue;
+            detailsHTML += `
+                <div class="sidebar-data-group">
+                    <span class="sidebar-data-label">${escapeHTML(key)}</span>
+                    <span class="sidebar-data-value">${escapeHTML(String(val))}</span>
+                </div>`;
+        }
+        detailsHTML += '</div>';
+
+        sidebarBody.innerHTML = `
+            <div class="sidebar-note-section">
+                <h3>Notas guardadas:</h3>
+                <div class="sidebar-note-content">${escapeHTML(note)}</div>
+            </div>
+            <hr class="sidebar-divider">
+            <div class="sidebar-info-section">
+                <h3>Datos completos:</h3>
+                ${detailsHTML}
+            </div>
+        `;
+        
+        notesSidebar.classList.add('open');
+    };
+
+
+    window.saveNote = async (id, btn) => {
+        // Functionality removed as per user request
+        console.log("Saving functionality disabled.");
+    };
 
     function setupInfiniteScroll() {
         const old = document.getElementById('loadMoreSentinel');
@@ -322,6 +385,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initData() {
         try {
+            // Fetch notes first
+            const nResp = await fetch('/api/notes');
+            if (nResp.ok) recordNotes = await nResp.json();
+
             const resp = await fetch('/api/index-status');
             const status = await resp.json();
             if (status.exists) {

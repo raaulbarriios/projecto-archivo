@@ -610,3 +610,136 @@ header p {
     opacity: 1;
 }
 
+
+/* Sidebar Styles */
+.sidebar {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 400px;
+    max-width: 85%;
+    height: 100%;
+    z-index: 1000;
+    transition: var(--transition);
+}
+
+.sidebar.open {
+    right: 0;
+}
+
+.sidebar-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: rgba(11, 12, 16, 0.95);
+    backdrop-filter: blur(20px);
+    border-left: 1px solid var(--card-border);
+    padding: 2rem;
+    overflow-y: auto;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.sidebar-header h2 {
+    font-family: 'Outfit', sans-serif;
+    color: var(--accent);
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 2.5rem;
+    cursor: pointer;
+}
+
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: var(--transition);
+}
+
+.sidebar.open .sidebar-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.sidebar-body {
+    flex: 1;
+}
+
+.sidebar-note-section h3, .sidebar-info-section h3 {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+    margin-bottom: 1rem;
+}
+
+.sidebar-note-content {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    border-radius: 12px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+}
+
+.sidebar-divider {
+    margin: 2rem 0;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-data-group {
+    margin-bottom: 1.5rem;
+}
+
+.sidebar-data-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 0.3rem;
+}
+
+.sidebar-data-value {
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+/* Emoji Button */
+.notes-container-mini {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.emoji-note-btn {
+    background: rgba(102, 252, 241, 0.1);
+    border: 1px solid rgba(102, 252, 241, 0.2);
+    font-size: 1.2rem;
+    padding: 0.5rem;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.emoji-note-btn:hover {
+    background: var(--accent);
+    transform: scale(1.1);
+}
