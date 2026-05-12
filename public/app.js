@@ -282,14 +282,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         card.innerHTML = `
             <div class="card-content-wrapper">
-                ${imgHTML}
+                <div class="card-image-column">
+                    ${imgHTML}
+                    ${notesHTML}
+                </div>
                 <div class="card-main-info">
                     <div class="card-header">
                         <span class="card-source">📄 ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table)}</span>
                         <div class="card-location">📍 Fila: ${meta.row}</div>
                     </div>
                     ${gridHTML}
-                    ${notesHTML}
                 </div>
             </div>`;
         return card;
