@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let hasMoreResults = true;
     let debounceTimer;
     let recordNotes = {}; // To store fetched notes
+    let lastSearchResults = []; // To store results for easy access by index
 
     // Advanced Search Logic
     const advancedSearchToggle = document.getElementById('advancedSearchToggle');
@@ -149,10 +150,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (type === 'SEARCH_RESULTS') {
             if (meta.offset === 0) {
                 resultsContainer.innerHTML = '';
+                lastSearchResults = [];
                 if (payload.length === 0) showNoResults();
                 else resultCount.textContent = `Mostrando resultados para "${currentQuery || 'todo'}"`;
             }
-            appendResults(payload);
+            lastSearchResults.push(...payload);
+            appendResults(payload, meta.offset);
             isLoadingMore = false;
             hasMoreResults = payload.length === CHUNK_SIZE;
             currentRenderIndex += payload.length;
@@ -220,43 +223,49 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function appendResults(results) {
+    function appendResults(results, offset) {
         const fragment = document.createDocumentFragment();
         results.forEach((record, i) => {
-            fragment.appendChild(createRecordCard(record, currentRenderIndex + i));
+            fragment.appendChild(createRecordCard(record, offset + i));
         });
         resultsContainer.appendChild(fragment);
     }
 
+    function extractImageSrc(record) {
+        if (!record) return null;
+        const displayData = { ...record };
+        delete displayData.__meta;
+
+        // Priority 1: Direct path or URL in specific fields
+        for (const [key, val] of Object.entries(displayData)) {
+            const lowKey = key.toLowerCase();
+            if ((lowKey.includes('foto') || lowKey.includes('imagen') || lowKey.includes('ruta')) && val) {
+                const cleanVal = String(val).trim();
+                return (cleanVal.includes('/') || cleanVal.includes('\\')) 
+                    ? `/api/file?path=${encodeURIComponent(cleanVal)}`
+                    : `/imagenes/${encodeURIComponent(cleanVal)}`;
+            }
+        }
+        
+        // Priority 2: Named match (ID, Name, etc.) + .jpg
+        const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte'];
+        for (const [key, val] of Object.entries(displayData)) {
+            if (imgKeys.some(k => key.toLowerCase().includes(k)) && val) {
+                return `/imagenes/${encodeURIComponent(String(val).trim())}.jpg`;
+            }
+        }
+        return null;
+    }
+
     function createRecordCard(record, index) {
-        const meta = record.__meta;
+        const meta = record?.__meta || { file: 'Desconocido', sheet: '', row: '?' };
         const displayData = { ...record };
         delete displayData.__meta;
 
         const card = document.createElement('div');
         card.className = 'record-card';
         
-        // Image logic
-        let imageSrc = null;
-        for (const [key, val] of Object.entries(displayData)) {
-            const lowKey = key.toLowerCase();
-            if ((lowKey.includes('foto') || lowKey.includes('imagen') || lowKey.includes('ruta')) && val) {
-                const cleanVal = String(val).trim();
-                imageSrc = (cleanVal.includes('/') || cleanVal.includes('\\')) 
-                    ? `/api/file?path=${encodeURIComponent(cleanVal)}`
-                    : `/imagenes/${encodeURIComponent(cleanVal)}`;
-                break;
-            }
-        }
-        if (!imageSrc) {
-            const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte'];
-            for (const [key, val] of Object.entries(displayData)) {
-                if (imgKeys.some(k => key.toLowerCase().includes(k)) && val) {
-                    imageSrc = `/imagenes/${encodeURIComponent(String(val).trim())}.jpg`;
-                    break;
-                }
-            }
-        }
+        const imageSrc = extractImageSrc(record);
 
         let imgHTML = '';
         if (imageSrc) {
@@ -264,13 +273,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="card-auto-image">
                     <img src="${imageSrc}" 
                          onerror="if(this.src.includes('.jpg')) this.src=this.src.replace('.jpg','.png'); else this.parentElement.style.display='none';"
-                         onclick="window.open(this.src, '_blank')">
+                         onclick="window.openSidebarWithAnimation(this, ${index})">
                 </div>`;
         }
 
         let gridHTML = '<div class="data-grid">';
         for (const [key, val] of Object.entries(displayData)) {
-            if (!val) continue;
+            if (!val && val !== 0) continue;
             gridHTML += `
                 <div class="data-group">
                     <span class="data-label">${escapeHTML(key)}</span>
@@ -280,27 +289,15 @@ document.addEventListener('DOMContentLoaded', () => {
         gridHTML += '</div>';
 
         const recordId = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`;
-        const existingNote = recordNotes[recordId] || '';
-
-        let notesHTML = '';
-        if (imageSrc) {
-            notesHTML = `
-                <div class="notes-container-mini">
-                    <button class="emoji-note-btn" title="Ver notas" onclick="window.openSidebar('${recordId.replace(/'/g, "\\'")}', ${JSON.stringify(record).replace(/"/g, '&quot;')})">
-                        📝
-                    </button>
-                </div>`;
-        }
-
+        
         card.innerHTML = `
             <div class="card-content-wrapper">
                 <div class="card-image-column">
                     ${imgHTML}
-                    ${notesHTML}
                 </div>
                 <div class="card-main-info">
                     <div class="card-header">
-                        <span class="card-source">📄 ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table)}</span>
+                        <span class="card-source">📄 ${escapeHTML(meta.file)} - ${escapeHTML(meta.sheet || meta.table || '')}</span>
                         <div class="card-location">📍 Fila: ${meta.row}</div>
                     </div>
                     ${gridHTML}
@@ -309,8 +306,70 @@ document.addEventListener('DOMContentLoaded', () => {
         return card;
     }
 
-    window.openSidebar = (id, record) => {
+    window.openSidebarByIndex = (index) => {
+        const record = lastSearchResults[index];
+        if (!record) return;
+        const meta = record.__meta;
+        const id = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`;
+        window.openSidebar(id, record);
+    };
+
+    window.openSidebarWithAnimation = (imgEl, index) => {
+        const record = lastSearchResults[index];
+        if (!record) return;
+        const meta = record.__meta;
+        const id = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`;
+        
+        const rect = imgEl.getBoundingClientRect();
+        const src = imgEl.src;
+        
+        // Create flying clone
+        const flyer = document.createElement('img');
+        flyer.src = src;
+        flyer.className = 'flying-image';
+        flyer.style.top = rect.top + 'px';
+        flyer.style.left = rect.left + 'px';
+        flyer.style.width = rect.width + 'px';
+        flyer.style.height = rect.height + 'px';
+        document.body.appendChild(flyer);
+        
+        // Open sidebar with image hidden initially
+        window.openSidebar(id, record, true);
+        
+        // Trigger animation in next frame
+        setTimeout(() => {
+            const target = document.getElementById('sidebarImagePlaceholder');
+            if (target) {
+                const checkTarget = () => {
+                    const targetRect = target.getBoundingClientRect();
+                    if (targetRect.left >= window.innerWidth) {
+                        requestAnimationFrame(checkTarget);
+                        return;
+                    }
+                    
+                    flyer.style.top = targetRect.top + 'px';
+                    flyer.style.left = targetRect.left + 'px';
+                    flyer.style.width = targetRect.width + 'px';
+                    flyer.style.height = targetRect.height + 'px';
+                    flyer.style.borderRadius = '12px';
+                    
+                    flyer.addEventListener('transitionend', () => {
+                        target.src = src;
+                        target.style.opacity = '1';
+                        flyer.remove();
+                    }, { once: true });
+                };
+                checkTarget();
+            } else {
+                flyer.remove();
+            }
+        }, 50);
+    };
+
+    window.openSidebar = (id, record, skipImageAnimation = false) => {
         const savedData = recordNotes[id] || {};
+        const imageSrc = extractImageSrc(record);
+
         const fields = [
             'CODIGO DE REFERENCIA',
             'TITULO',
@@ -358,6 +417,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sidebarBody.innerHTML = `
             <div class="sidebar-section">
+                ${imageSrc ? `
+                    <div class="sidebar-image-container">
+                        <img id="sidebarImagePlaceholder" 
+                             src="${imageSrc}" 
+                             style="${skipImageAnimation ? 'opacity: 0;' : 'opacity: 1;'}"
+                             onclick="window.open(this.src, '_blank')"
+                             onerror="if(this.src.includes('.jpg')) this.src=this.src.replace('.jpg','.png'); else this.parentElement.style.display='none';">
+                    </div>
+                ` : ''}
                 <h3>Ficha de Descripción:</h3>
                 ${formHTML}
             </div>
