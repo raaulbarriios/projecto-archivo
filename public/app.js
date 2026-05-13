@@ -273,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="card-auto-image">
                     <img src="${imageSrc}" 
                          onerror="if(this.src.includes('.jpg')) this.src=this.src.replace('.jpg','.png'); else this.parentElement.style.display='none';"
-                         onclick="window.openSidebarWithAnimation(this, ${index})">
+                         onclick="window.openSidebarByIndex(${index})">
                 </div>`;
         }
 
@@ -314,59 +314,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.openSidebar(id, record);
     };
 
-    window.openSidebarWithAnimation = (imgEl, index) => {
-        const record = lastSearchResults[index];
-        if (!record) return;
-        const meta = record.__meta;
-        const id = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`;
-        
-        const rect = imgEl.getBoundingClientRect();
-        const src = imgEl.src;
-        
-        // Create flying clone
-        const flyer = document.createElement('img');
-        flyer.src = src;
-        flyer.className = 'flying-image';
-        flyer.style.top = rect.top + 'px';
-        flyer.style.left = rect.left + 'px';
-        flyer.style.width = rect.width + 'px';
-        flyer.style.height = rect.height + 'px';
-        document.body.appendChild(flyer);
-        
-        // Open sidebar with image hidden initially
-        window.openSidebar(id, record, true);
-        
-        // Trigger animation in next frame
-        setTimeout(() => {
-            const target = document.getElementById('sidebarImagePlaceholder');
-            if (target) {
-                const checkTarget = () => {
-                    const targetRect = target.getBoundingClientRect();
-                    if (targetRect.left >= window.innerWidth) {
-                        requestAnimationFrame(checkTarget);
-                        return;
-                    }
-                    
-                    flyer.style.top = targetRect.top + 'px';
-                    flyer.style.left = targetRect.left + 'px';
-                    flyer.style.width = targetRect.width + 'px';
-                    flyer.style.height = targetRect.height + 'px';
-                    flyer.style.borderRadius = '12px';
-                    
-                    flyer.addEventListener('transitionend', () => {
-                        target.src = src;
-                        target.style.opacity = '1';
-                        flyer.remove();
-                    }, { once: true });
-                };
-                checkTarget();
-            } else {
-                flyer.remove();
-            }
-        }, 50);
-    };
 
-    window.openSidebar = (id, record, skipImageAnimation = false) => {
+    window.openSidebar = (id, record) => {
         const savedData = recordNotes[id] || {};
         const imageSrc = extractImageSrc(record);
 
@@ -421,7 +370,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="sidebar-image-container">
                         <img id="sidebarImagePlaceholder" 
                              src="${imageSrc}" 
-                             style="${skipImageAnimation ? 'opacity: 0;' : 'opacity: 1;'}"
                              onclick="window.open(this.src, '_blank')"
                              onerror="if(this.src.includes('.jpg')) this.src=this.src.replace('.jpg','.png'); else this.parentElement.style.display='none';">
                     </div>
