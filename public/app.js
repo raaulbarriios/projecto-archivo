@@ -1,84 +1,90 @@
+// Se ejecuta cuando el contenido del DOM ha sido cargado completamente
 document.addEventListener('DOMContentLoaded', () => {
-    const searchInput = document.getElementById('searchInput');
-    const clearBtn = document.getElementById('clearBtn');
-    const resultsContainer = document.getElementById('resultsContainer');
-    const resultCount = document.getElementById('resultCount');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const rebuildIndexBtn = document.getElementById('rebuildIndexBtn');
-    const importBtn = document.getElementById('importBtn');
-    const fileInput = document.getElementById('fileInput');
-    const notesSidebar = document.getElementById('notesSidebar');
-    const sidebarBody = document.getElementById('sidebarBody');
-    const closeSidebar = document.getElementById('closeSidebar');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    // Referencias a elementos del DOM (interfaz de usuario)
+    const searchInput = document.getElementById('searchInput'); // Campo de búsqueda principal
+    const clearBtn = document.getElementById('clearBtn'); // Botón para limpiar la búsqueda
+    const resultsContainer = document.getElementById('resultsContainer'); // Contenedor de resultados
+    const resultCount = document.getElementById('resultCount'); // Texto que muestra el estado/conteo
+    const refreshBtn = document.getElementById('refreshBtn'); // Botón para actualizar datos
+    const rebuildIndexBtn = document.getElementById('rebuildIndexBtn'); // Botón para optimizar el índice
+    const importBtn = document.getElementById('importBtn'); // Botón para importar archivos
+    const fileInput = document.getElementById('fileInput'); // Entrada de archivos (oculta)
+    const notesSidebar = document.getElementById('notesSidebar'); // Barra lateral de detalles
+    const sidebarBody = document.getElementById('sidebarBody'); // Cuerpo de la barra lateral
+    const closeSidebar = document.getElementById('closeSidebar'); // Botón para cerrar la barra lateral
+    const sidebarOverlay = document.getElementById('sidebarOverlay'); // Fondo oscuro de la barra lateral
 
+    // Variables de estado global de la aplicación
+    let currentRenderIndex = 0; // Índice actual para el scroll infinito
+    const CHUNK_SIZE = 50; // Cantidad de resultados que se cargan por bloque
+    let currentQuery = ""; // Almacena la consulta de búsqueda actual
+    let isWorkerReady = false; // Indica si el Worker de búsqueda está listo
+    let isLoadingMore = false; // Indica si se están cargando más resultados (scroll)
+    let hasMoreResults = true; // Indica si hay más resultados disponibles en el Worker
+    let debounceTimer; // Temporizador para evitar búsquedas excesivas mientras se escribe
+    let recordNotes = {}; // Almacena las notas/fichas técnicas guardadas en el servidor
+    let lastSearchResults = []; // Copia de los últimos resultados para acceso rápido por índice
 
-    // State variables
-    let currentRenderIndex = 0;
-    const CHUNK_SIZE = 50;
-    let currentQuery = "";
-    let isWorkerReady = false;
-    let isLoadingMore = false;
-    let hasMoreResults = true;
-    let debounceTimer;
-    let recordNotes = {}; // To store fetched notes
-    let lastSearchResults = []; // To store results for easy access by index
+    // Lógica de Búsqueda Avanzada
+    const advancedSearchToggle = document.getElementById('advancedSearchToggle'); // Botón de toggle
+    const advancedPanel = document.getElementById('advancedPanel'); // Panel de filtros extra
+    const filterYear = document.getElementById('filterYear'); // Filtro de año
+    const filterFile = document.getElementById('filterFile'); // Filtro de archivo original
+    const filterDoc = document.getElementById('filterDoc'); // Filtro de observaciones
 
-    // Advanced Search Logic
-    const advancedSearchToggle = document.getElementById('advancedSearchToggle');
-    const advancedPanel = document.getElementById('advancedPanel');
-    const filterYear = document.getElementById('filterYear');
-    const filterFile = document.getElementById('filterFile');
-    const filterDoc = document.getElementById('filterDoc');
-
+    // Inicialización del Web Worker para realizar búsquedas en segundo plano sin bloquear la UI
     const searchWorker = new Worker('search-worker.js');
 
-    // UI Events
+    // Evento para mostrar/ocultar el panel de búsqueda avanzada
     advancedSearchToggle.addEventListener('click', () => {
         advancedPanel.classList.toggle('hidden');
         advancedSearchToggle.classList.toggle('active');
     });
 
+    // Añade eventos a los filtros avanzados para disparar la búsqueda al cambiar sus valores
     [filterYear, filterFile, filterDoc].forEach(el => {
         const eventType = el.tagName === 'SELECT' ? 'change' : 'input';
         el.addEventListener(eventType, () => {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 performSearch(searchInput.value.trim());
-            }, 300);
+            }, 300); // Espera 300ms después de que el usuario deje de escribir
         });
     });
 
+    // Evento de escritura en el campo de búsqueda principal
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
-        clearBtn.classList.toggle('hidden', query.length === 0);
+        clearBtn.classList.toggle('hidden', query.length === 0); // Muestra/oculta el botón X
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => performSearch(query), 300);
+        debounceTimer = setTimeout(() => performSearch(query), 300); // Dispara la búsqueda con debounce
     });
 
+    // Evento para limpiar todos los campos de búsqueda y filtros
     clearBtn.addEventListener('click', () => {
         searchInput.value = '';
         filterYear.value = '';
         filterDoc.value = '';
         filterFile.value = '';
         clearBtn.classList.add('hidden');
-        performSearch("");
+        performSearch(""); // Vuelve al estado inicial
     });
     
-    // Sidebar closing
+    // Eventos para cerrar la barra lateral (haciendo clic en X o en el fondo oscuro)
     [closeSidebar, sidebarOverlay].forEach(el => {
         el.addEventListener('click', () => {
             notesSidebar.classList.remove('open');
         });
     });
 
-
+    // Evento para recargar los datos desde el servidor
     refreshBtn.addEventListener('click', () => {
         if (refreshBtn.classList.contains('loading')) return;
         refreshBtn.classList.add('loading');
         initData();
     });
 
+    // Función para solicitar al servidor que regenere el índice de búsqueda (JSON optimizado)
     async function triggerRebuild(skipConfirm = false) {
         if (rebuildIndexBtn.classList.contains('loading')) return;
         if (!skipConfirm && !confirm("Esto procesará todos los archivos en el servidor. ¿Continuar?")) return;
@@ -91,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (data.success) {
                 resultCount.textContent = `¡Hecho! ${data.count} registros optimizados.`;
+                // Notifica al Worker que cargue el nuevo archivo JSON generado
                 searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
             }
         } catch (err) {
@@ -100,9 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Evento para el botón de optimización manual
     rebuildIndexBtn.addEventListener('click', () => triggerRebuild(false));
 
+    // Evento para abrir el selector de archivos al hacer clic en Importar
     importBtn.addEventListener('click', () => fileInput.click());
+    
+    // Evento que se dispara al seleccionar archivos para subir
     fileInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
@@ -111,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultCount.textContent = `Subiendo ${files.length} archivos al servidor...`;
 
         const formData = new FormData();
-        files.forEach(f => formData.append('files', f));
+        files.forEach(f => formData.append('files', f)); // Prepara los archivos para el envío
 
         try {
             const response = await fetch('/api/upload', {
@@ -122,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (data.success) {
                 resultCount.textContent = `¡Subidos! Procesando e indexando...`;
-                // Trigger index rebuild automatically without another confirmation
+                // Lanza la reconstrucción del índice automáticamente tras la subida
                 triggerRebuild(true);
             } else {
                 throw new Error(data.error);
@@ -132,37 +143,41 @@ document.addEventListener('DOMContentLoaded', () => {
             resultCount.textContent = 'Error en la subida.';
         } finally {
             importBtn.classList.remove('loading');
-            fileInput.value = ''; // Reset input
+            fileInput.value = ''; // Limpia el input para permitir subir el mismo archivo otra vez
         }
     });
 
-    // Worker Communication
+    // Escucha de mensajes provenientes del Web Worker
     searchWorker.onmessage = (e) => {
         const { type, payload, meta } = e.data;
         
         if (type === 'READY') {
+            // El Worker ha terminado de cargar los datos
             isWorkerReady = true;
             resultCount.textContent = `Listos. ${payload.totalRecords} registros disponibles.`;
             refreshBtn.classList.remove('loading');
             importBtn.classList.remove('loading');
-            if (payload.files) updateFileFilter(payload.files);
-            performSearch(searchInput.value.trim());
+            if (payload.files) updateFileFilter(payload.files); // Actualiza el selector de archivos
+            performSearch(searchInput.value.trim()); // Realiza la búsqueda inicial si hay texto
         } else if (type === 'SEARCH_RESULTS') {
+            // El Worker devuelve resultados de una búsqueda
             if (meta.offset === 0) {
+                // Si es el primer bloque, limpia el contenedor
                 resultsContainer.innerHTML = '';
                 lastSearchResults = [];
                 if (payload.length === 0) showNoResults();
                 else resultCount.textContent = `Mostrando resultados para "${currentQuery || 'todo'}"`;
             }
-            lastSearchResults.push(...payload);
-            appendResults(payload, meta.offset);
+            lastSearchResults.push(...payload); // Guarda resultados para uso posterior
+            appendResults(payload, meta.offset); // Añade los resultados al DOM
             isLoadingMore = false;
-            hasMoreResults = payload.length === CHUNK_SIZE;
+            hasMoreResults = payload.length === CHUNK_SIZE; // Si vienen menos de 50, ya no hay más
             currentRenderIndex += payload.length;
-            setupInfiniteScroll();
+            setupInfiniteScroll(); // Reinicializa el detector de scroll
         }
     };
 
+    // Actualiza las opciones del desplegable de "Sección / Archivo" basándose en los datos cargados
     function updateFileFilter(files) {
         const current = filterFile.value;
         filterFile.innerHTML = '<option value="">Todos los archivos</option>';
@@ -175,12 +190,14 @@ document.addEventListener('DOMContentLoaded', () => {
         filterFile.value = current;
     }
 
+    // Envía una solicitud de búsqueda al Worker
     function performSearch(query) {
         if (!isWorkerReady) return;
         currentQuery = query;
         currentRenderIndex = 0;
         hasMoreResults = true;
 
+        // Si no hay nada que buscar y no hay filtros, muestra el estado vacío
         if (!query && !filterYear.value.trim() && !filterFile.value && !filterDoc.value.trim()) {
             resultsContainer.innerHTML = '';
             const emptyState = document.getElementById('emptyState');
@@ -194,19 +211,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         isLoadingMore = true;
 
+        // Recopila los valores de los filtros avanzados
         const filters = {
             year: filterYear.value.trim(),
             file: filterFile.value,
             doc: filterDoc.value.trim()
         };
 
+        // Muestra un spinner de carga
         resultsContainer.innerHTML = '<div class="spinner"></div>';
+        // Envía el mensaje al Worker con los parámetros de búsqueda
         searchWorker.postMessage({ 
             type: 'SEARCH', 
             payload: { query, filters, offset: 0, limit: CHUNK_SIZE } 
         });
     }
 
+    // Solicita el siguiente bloque de resultados para el scroll infinito
     function renderNextChunk() {
         if (!isWorkerReady || isLoadingMore || !hasMoreResults) return;
         isLoadingMore = true;
@@ -223,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Inserta los fragmentos de tarjetas de resultados en el contenedor principal
     function appendResults(results, offset) {
         const fragment = document.createDocumentFragment();
         results.forEach((record, i) => {
@@ -231,23 +253,24 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContainer.appendChild(fragment);
     }
 
+    // Lógica para intentar encontrar una imagen asociada a un registro (por nombre, ID o ruta)
     function extractImageSrc(record) {
         if (!record) return null;
         const displayData = { ...record };
         delete displayData.__meta;
 
-        // Priority 1: Direct path or URL in specific fields
+        // Prioridad 1: Busca campos que digan "foto", "imagen" o "ruta" explícitamente
         for (const [key, val] of Object.entries(displayData)) {
             const lowKey = key.toLowerCase();
             if ((lowKey.includes('foto') || lowKey.includes('imagen') || lowKey.includes('ruta')) && val) {
                 const cleanVal = String(val).trim();
                 return (cleanVal.includes('/') || cleanVal.includes('\\')) 
-                    ? `/api/file?path=${encodeURIComponent(cleanVal)}`
-                    : `/imagenes/${encodeURIComponent(cleanVal)}`;
+                    ? `/api/file?path=${encodeURIComponent(cleanVal)}` // Ruta absoluta en el servidor
+                    : `/imagenes/${encodeURIComponent(cleanVal)}`; // Nombre de archivo en carpeta /imagenes
             }
         }
         
-        // Priority 2: Named match (ID, Name, etc.) + .jpg
+        // Prioridad 2: Intenta emparejar campos comunes (ID, Nombre, Pasaporte) con una extensión .jpg
         const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte'];
         for (const [key, val] of Object.entries(displayData)) {
             if (imgKeys.some(k => key.toLowerCase().includes(k)) && val) {
@@ -257,15 +280,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
+    // Crea el elemento visual (HTML) de una tarjeta de resultado
     function createRecordCard(record, index) {
         const meta = record?.__meta || { file: 'Desconocido', sheet: '', row: '?' };
         const displayData = { ...record };
-        delete displayData.__meta;
+        delete displayData.__meta; // Elimina metadatos de la vista de datos brutos
 
         const card = document.createElement('div');
         card.className = 'record-card';
         
-        const imageSrc = extractImageSrc(record);
+        const imageSrc = extractImageSrc(record); // Intenta obtener la imagen
 
         let imgHTML = '';
         if (imageSrc) {
@@ -277,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
         }
 
+        // Genera la cuadrícula de datos del registro
         let gridHTML = '<div class="data-grid">';
         for (const [key, val] of Object.entries(displayData)) {
             if (!val && val !== 0) continue;
@@ -288,8 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         gridHTML += '</div>';
 
-        const recordId = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`;
-        
+        // Estructura interna de la tarjeta
         card.innerHTML = `
             <div class="card-content-wrapper">
                 <div class="card-image-column">
@@ -306,36 +330,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return card;
     }
 
+    // Abre la barra lateral buscando el registro por su índice en la lista de resultados actual
     window.openSidebarByIndex = (index) => {
         const record = lastSearchResults[index];
         if (!record) return;
         const meta = record.__meta;
-        const id = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`;
+        const id = `${meta.file}-${meta.sheet || meta.table}-${meta.row}`; // Identificador único del registro
         window.openSidebar(id, record);
     };
 
-
+    // Construye e inyecta el contenido de la barra lateral (Ficha técnica y Notas)
     window.openSidebar = (id, record) => {
-        const savedData = recordNotes[id] || {};
+        const savedData = recordNotes[id] || {}; // Recupera notas guardadas si existen
         const imageSrc = extractImageSrc(record);
 
+        // Campos estándar para la ficha de descripción archivística
         const fields = [
-            'CODIGO DE REFERENCIA',
-            'TITULO',
-            'FECHAS EXTREMAS',
-            'NIVEL DE DESCRIPCIÓN',
-            'VOLUMEN',
-            'PRODUCTOR',
-            'RESUMEN',
-            'CARACTERISTICAS FÍSICAS',
-            'DESCRIPTORES TOPOGRÁFICOS',
-            'DESCRIPTORES ONOMÁSTICOS',
-            'MATERIAS',
-            'NOTAS',
-            'NOTAS DE PUBLICACIÓN',
-            'NOTAS DEL ARCHIVERO'
+            'CODIGO DE REFERENCIA', 'TITULO', 'FECHAS EXTREMAS', 'NIVEL DE DESCRIPCIÓN',
+            'VOLUMEN', 'PRODUCTOR', 'RESUMEN', 'CARACTERISTICAS FÍSICAS',
+            'DESCRIPTORES TOPOGRÁFICOS', 'DESCRIPTORES ONOMÁSTICOS', 'MATERIAS',
+            'NOTAS', 'NOTAS DE PUBLICACIÓN', 'NOTAS DEL ARCHIVERO'
         ];
         
+        // Genera el formulario de la ficha (solo lectura por defecto hasta importar datos)
         let formHTML = '<div class="sidebar-form">';
         fields.forEach(field => {
             const val = savedData[field] || '';
@@ -349,6 +366,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 </div>`;
         });
+        
+        // Zona para importar archivos Word/Excel que rellenen la ficha automáticamente
         formHTML += `
             <div class="sidebar-import-zone">
                 <input type="file" id="sidebarFileInput" style="display:none" accept=".txt,.json,.xlsx,.xls,.csv,.ods,.docx,.odt">
@@ -364,6 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         </div>`;
 
+        // Inyecta todo en el cuerpo de la barra lateral
         sidebarBody.innerHTML = `
             <div class="sidebar-section">
                 ${imageSrc ? `
@@ -379,9 +399,9 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
         
-        notesSidebar.classList.add('open');
+        notesSidebar.classList.add('open'); // Abre la barra lateral
         
-        // Handle sidebar file import
+        // Manejador para la importación de archivos de ficha específicos del registro
         const fileInput = document.getElementById('sidebarFileInput');
         fileInput.onchange = async (e) => {
             const file = e.target.files[0];
@@ -396,6 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formData = new FormData();
                 formData.append('file', file);
 
+                // El servidor procesa el archivo y extrae los campos clave
                 const parseResp = await fetch('/api/parse-sidebar-file', {
                     method: 'POST',
                     body: formData
@@ -406,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { data: parsedFields } = await parseResp.json();
                 const newData = { ...recordNotes[id], ...parsedFields };
 
-                // Auto-save to server
+                // Guarda la ficha procesada en la base de datos de notas del servidor
                 const saveResp = await fetch('/api/save-note', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -415,8 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (saveResp.ok) {
                     recordNotes[id] = newData;
-                    // Refresh UI
-                    openSidebar(id, record);
+                    openSidebar(id, record); // Refresca la vista con los nuevos datos
                     alert("Ficha importada y guardada correctamente.");
                 }
             } catch (err) {
@@ -430,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     };
 
-
+    // Guarda manualmente el contenido de los inputs de la barra lateral (si fueran editables)
     window.saveNote = async (id, btn) => {
         const container = btn.parentElement;
         const inputs = container.querySelectorAll('input, textarea');
@@ -446,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/save-note', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, note: data }) // Sending the whole object as 'note'
+                body: JSON.stringify({ id, note: data })
             });
             const resData = await response.json();
             if (resData.success) {
@@ -466,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // Configura el observador para cargar más resultados cuando el usuario llega al final de la página
     function setupInfiniteScroll() {
         const old = document.getElementById('loadMoreSentinel');
         if (old) old.remove();
@@ -476,60 +497,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const observer = new IntersectionObserver((entries) => {
             if (entries[0].isIntersecting && hasMoreResults && !isLoadingMore) renderNextChunk();
-        }, { rootMargin: '400px' });
+        }, { rootMargin: '400px' }); // Dispara la carga 400px antes de llegar al final
         observer.observe(sentinel);
     }
 
+    // Muestra un mensaje informativo cuando no hay coincidencias
     function showNoResults() {
         resultsContainer.innerHTML = `<div class="empty-state"><p>No se encontraron registros.</p></div>`;
     }
 
+    // Resalta en amarillo (<mark>) los términos buscados dentro del texto, ignorando tildes
     function highlightText(text, query) {
         if (!query) return escapeHTML(text);
         let html = escapeHTML(text);
         
+        // Mapeo de caracteres para que la búsqueda ignore acentos
         const accentMap = {
-            'a': '[aáàäâ]',
-            'e': '[eéèëê]',
-            'i': '[iíìïî]',
-            'o': '[oóòöô]',
-            'u': '[uúùüû]',
-            'n': '[nñ]'
+            'a': '[aáàäâ]', 'e': '[eéèëê]', 'i': '[iíìïî]',
+            'o': '[oóòöô]', 'u': '[uúùüû]', 'n': '[nñ]'
         };
 
         const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
         
         words.forEach(word => {
-            // Create a regex that is accent-insensitive
             let pattern = "";
             for (let char of word) {
                 pattern += accentMap[char] || char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             }
             try {
                 const regex = new RegExp(`(${pattern})`, 'gi');
-                html = html.replace(regex, '<mark>$1</mark>');
+                html = html.replace(regex, '<mark>$1</mark>'); // Envuelve la coincidencia en <mark>
             } catch(e) {}
         });
         return html;
     }
 
+    // Escapa caracteres especiales de HTML para evitar ataques XSS
     function escapeHTML(str) {
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
     }
 
+    // Inicializa los datos de la aplicación al cargar la página
     async function initData() {
         try {
-            // Fetch notes first
+            // Recupera todas las notas guardadas desde el servidor
             const nResp = await fetch('/api/notes');
             if (nResp.ok) recordNotes = await nResp.json();
 
+            // Verifica si el índice optimizado existe en el servidor
             const resp = await fetch('/api/index-status');
             const status = await resp.json();
             if (status.exists) {
+                // Carga el JSON gigante de datos indexados
                 searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
             } else {
+                // Si no hay índice, intenta cargar los archivos brutos directamente
                 const fResp = await fetch('/api/files');
                 const fData = await fResp.json();
                 if (fData.files?.length > 0) {
@@ -541,5 +565,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Llama a la inicialización al arrancar
     initData();
 });
