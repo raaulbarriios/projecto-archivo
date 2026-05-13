@@ -2,6 +2,8 @@
 importScripts('https://unpkg.com/dexie@latest/dist/dexie.js');
 importScripts('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
 
+let workerNotes = {}; // Almacena las notas de la barra lateral para poder buscar en ellas
+
 /**
  * ESQUEMA DE LA BASE DE DATOS DEL ARCHIVO
  * Optimizado para bajo uso de RAM y búsquedas indexadas de alta velocidad.
@@ -17,6 +19,12 @@ db.version(2).stores({
 // Manejador de mensajes que recibe instrucciones desde el hilo principal (app.js)
 onmessage = async function(e) {
     const { type, payload } = e.data;
+
+    // CARGA DE NOTAS DE LA BARRA LATERAL
+    if (type === 'LOAD_NOTES') {
+        workerNotes = payload || {};
+        return;
+    }
 
     // CARGA DE ARCHIVOS BRUTOS (Excel, CSV, etc.)
     if (type === 'LOAD_FILES') {
@@ -177,7 +185,11 @@ onmessage = async function(e) {
                     const normDoc = normalizeText(filters.doc);
                     queryChain = queryChain.filter(r => {
                         const rowText = normalizeText(Object.values(r.data).join(' '));
-                        return rowText.includes(normDoc);
+                        const id = `${r.file}-${r.sheet}-${r.row}`;
+                        const notes = workerNotes[id] || {};
+                        const notesText = normalizeText(Object.values(notes).join(' '));
+                        
+                        return rowText.includes(normDoc) || notesText.includes(normDoc);
                     });
                 }
             }
@@ -191,7 +203,12 @@ onmessage = async function(e) {
                 results = await queryChain
                     .filter(r => {
                         const allText = normalizeText(Object.values(r.data).join(' '));
-                        return queryWords.length > 0 && queryWords.every(qw => allText.includes(qw));
+                        const id = `${r.file}-${r.sheet}-${r.row}`;
+                        const notes = workerNotes[id] || {};
+                        const notesText = normalizeText(Object.values(notes).join(' '));
+                        const combinedText = allText + " " + notesText;
+                        
+                        return queryWords.length > 0 && queryWords.every(qw => combinedText.includes(qw));
                     })
                     .offset(offset)
                     .limit(limit)

@@ -256,7 +256,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Lógica para intentar encontrar una imagen asociada a un registro (por nombre, ID o ruta)
     function extractImageSrc(record) {
         if (!record) return null;
-        const displayData = { ...record };
+        
+        // Incluye también los datos de la barra lateral (notas) para buscar la imagen
+        const meta = record.__meta;
+        const id = meta ? `${meta.file}-${meta.sheet || meta.table}-${meta.row}` : null;
+        const notes = id && recordNotes[id] ? recordNotes[id] : {};
+        
+        const displayData = { ...record, ...notes };
         delete displayData.__meta;
 
         // Prioridad 1: Busca campos que digan "foto", "imagen" o "ruta" explícitamente
@@ -270,8 +276,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // Prioridad 2: Intenta emparejar campos comunes (ID, Nombre, Pasaporte) con una extensión .jpg
-        const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte'];
+        // Prioridad 2: Intenta emparejar campos comunes (ID, Nombre, Pasaporte, Código de Referencia)
+        const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte', 'codigo de referencia', 'código de referencia'];
         for (const [key, val] of Object.entries(displayData)) {
             if (imgKeys.some(k => key.toLowerCase().includes(k)) && val) {
                 return `/imagenes/${encodeURIComponent(String(val).trim())}.jpg`;
@@ -436,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (saveResp.ok) {
                     recordNotes[id] = newData;
+                    searchWorker.postMessage({ type: 'LOAD_NOTES', payload: recordNotes }); // Actualiza el worker
                     openSidebar(id, record); // Refresca la vista con los nuevos datos
                     alert("Ficha importada y guardada correctamente.");
                 }
@@ -471,6 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const resData = await response.json();
             if (resData.success) {
                 recordNotes[id] = data;
+                searchWorker.postMessage({ type: 'LOAD_NOTES', payload: recordNotes }); // Actualiza el worker
                 btn.textContent = '¡Guardado!';
                 btn.classList.add('success');
                 setTimeout(() => {
@@ -544,7 +552,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // Recupera todas las notas guardadas desde el servidor
             const nResp = await fetch('/api/notes');
-            if (nResp.ok) recordNotes = await nResp.json();
+            if (nResp.ok) {
+                recordNotes = await nResp.json();
+                searchWorker.postMessage({ type: 'LOAD_NOTES', payload: recordNotes });
+            }
 
             // Verifica si el índice optimizado existe en el servidor
             const resp = await fetch('/api/index-status');
