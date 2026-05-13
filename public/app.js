@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Zona para importar archivos Word/Excel que rellenen la ficha automáticamente
         formHTML += `
             <div class="sidebar-import-zone">
-                <input type="file" id="sidebarFileInput" style="display:none" accept=".txt,.json,.xlsx,.xls,.csv,.ods,.docx,.odt">
+                <input type="file" id="sidebarFileInput" style="display:none" accept=".txt,.json,.xlsx,.xls,.csv,.ods,.odb,.docx,.odt">
                 <button class="import-sidebar-btn" onclick="document.getElementById('sidebarFileInput').click()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; margin-right: 8px;">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -379,7 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </svg>
                     Importar Ficha (Word/Excel/TXT)
                 </button>
-                <p class="import-help">Soporta: XLSX, CSV, ODS, DOCX, ODT, TXT</p>
+                <p class="import-help">Soporta: XLSX, CSV, ODS, ODB, DOCX, ODT, TXT</p>
             </div>
         </div>`;
 
@@ -517,7 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'o': '[oóòöô]', 'u': '[uúùüû]', 'n': '[nñ]'
         };
 
-        const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
         
         words.forEach(word => {
             let pattern = "";

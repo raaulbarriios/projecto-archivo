@@ -138,7 +138,7 @@ onmessage = async function(e) {
             }
         });
         // Extrae palabras únicas de más de 2 caracteres para el índice de búsqueda
-        record.searchWords = [...new Set(allText.join(' ').split(/[\s,.;:()\-]+/).filter(w => w.length > 2))];
+        record.searchWords = [...new Set(allText.join(' ').split(/[\s,.;:()\-]+/).filter(w => w.length > 0))];
         return record;
     }
 
@@ -156,7 +156,7 @@ onmessage = async function(e) {
     if (type === 'SEARCH') {
         const { query, filters, offset = 0, limit = 50 } = payload;
         const normQuery = normalizeText(query);
-        const queryWords = normQuery.split(/\s+/).filter(w => w.length > 2);
+        const queryWords = normQuery.split(/\s+/).filter(w => w.length > 0);
         
         try {
             let queryChain = db.records;
@@ -191,7 +191,7 @@ onmessage = async function(e) {
                 results = await queryChain
                     .filter(r => {
                         const allText = normalizeText(Object.values(r.data).join(' '));
-                        return queryWords.every(qw => allText.includes(qw));
+                        return queryWords.length > 0 && queryWords.every(qw => allText.includes(qw));
                     })
                     .offset(offset)
                     .limit(limit)
