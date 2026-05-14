@@ -6,7 +6,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsContainer = document.getElementById('resultsContainer'); // Contenedor de resultados
     const resultCount = document.getElementById('resultCount'); // Texto que muestra el estado/conteo
     const refreshBtn = document.getElementById('refreshBtn'); // Botón para actualizar datos
-    const rebuildIndexBtn = document.getElementById('rebuildIndexBtn'); // Botón para optimizar el índice
     const importBtn = document.getElementById('importBtn'); // Botón para importar archivos
     const fileInput = document.getElementById('fileInput'); // Entrada de archivos (oculta)
     const notesSidebar = document.getElementById('notesSidebar'); // Barra lateral de detalles
@@ -86,10 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Función para solicitar al servidor que regenere el índice de búsqueda (JSON optimizado)
     async function triggerRebuild(skipConfirm = false) {
-        if (rebuildIndexBtn.classList.contains('loading')) return;
         if (!skipConfirm && !confirm("Esto procesará todos los archivos en el servidor. ¿Continuar?")) return;
 
-        rebuildIndexBtn.classList.add('loading');
         resultCount.textContent = 'Generando índice en servidor...';
         
         try {
@@ -102,13 +99,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             resultCount.textContent = 'Error al optimizar.';
-        } finally {
-            rebuildIndexBtn.classList.remove('loading');
         }
     }
-
-    // Evento para el botón de optimización manual
-    rebuildIndexBtn.addEventListener('click', () => triggerRebuild(false));
 
     // Evento para abrir el selector de archivos al hacer clic en Importar
     importBtn.addEventListener('click', () => fileInput.click());

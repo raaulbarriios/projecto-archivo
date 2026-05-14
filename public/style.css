@@ -106,13 +106,24 @@ header p {
     margin-bottom: 1rem;
     display: flex;
     align-items: center;
-    background: rgba(11, 12, 16, 0.4);
     border: 1px solid var(--card-border);
     border-radius: 16px;
     padding: 0 1rem;
-    backdrop-filter: blur(10px);
     box-shadow: var(--glass-shadow);
     transition: var(--transition);
+    z-index: 1;
+}
+
+.search-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(11, 12, 16, 0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: inherit;
+    z-index: -1;
+    pointer-events: none;
 }
 
 .search-box:focus-within {
@@ -131,6 +142,7 @@ header p {
 
 #searchInput {
     flex: 1;
+    background-color: transparent !important;
     background: transparent;
     border: none;
     padding: 1.5rem 0;
@@ -138,6 +150,18 @@ header p {
     color: var(--text-primary);
     font-family: inherit;
     outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    box-shadow: none !important;
+}
+
+/* Evitar que el navegador cambie el fondo al autocompletar */
+#searchInput:-webkit-autofill,
+#searchInput:-webkit-autofill:hover, 
+#searchInput:-webkit-autofill:focus, 
+#searchInput:-webkit-autofill:active {
+    transition: background-color 5000s ease-in-out 0s;
+    -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 #searchInput::placeholder {
@@ -169,6 +193,12 @@ header p {
     color: var(--text-secondary);
 }
 
+.action-buttons {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
 .refresh-btn {
     background: rgba(31, 40, 51, 0.8);
     border: 1px solid var(--card-border);
@@ -198,12 +228,6 @@ header p {
     background: rgba(102, 252, 241, 0.1);
     border-color: var(--accent);
     box-shadow: 0 4px 15px rgba(102, 252, 241, 0.2);
-}
-
-#rebuildIndexBtn:hover {
-    background: rgba(246, 173, 85, 0.1);
-    border-color: #f6ad55;
-    box-shadow: 0 4px 15px rgba(246, 173, 85, 0.2);
 }
 
 #importBtn:hover {

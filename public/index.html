@@ -87,43 +87,31 @@
             <!-- Barra de estado con contador de resultados y botones de acción -->
             <div class="status-bar">
                 <span id="resultCount" class="result-count">Escriba para empezar a buscar.</span>
-                
-                <!-- Botón para refrescar los datos desde el servidor -->
-                <button id="refreshBtn" class="refresh-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                    </svg>
-                    Actualizar Carpeta
-                </button>
-                
-                <!-- Botón para reconstruir el índice de búsqueda (optimización) -->
-                <button id="rebuildIndexBtn" class="refresh-btn" style="border-color: #f6ad55; color: #f6ad55;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <path
-                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
-                        </path>
-                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                    </svg>
-                    Optimizar Datos
-                </button>
-                
-                <!-- Entrada de archivos oculta (se activa mediante JS) -->
-                <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.ods,.odb,.accdb,.mdb,.jpg,.jpeg,.png,.gif" style="display:none">
-                
-                <!-- Botón para importar nuevos archivos al servidor -->
-                <button id="importBtn" class="refresh-btn" style="border-color: #6a0dad; color: #b794f4;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    Importar Archivos
-                </button>
+                <div class="action-buttons">
+                    <!-- Botón para refrescar los datos desde el servidor -->
+                    <button id="refreshBtn" class="refresh-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                        Actualizar Carpeta
+                    </button>
+                    
+                    <!-- Entrada de archivos oculta (se activa mediante JS) -->
+                    <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.ods,.odb,.accdb,.mdb,.jpg,.jpeg,.png,.gif" style="display:none">
+                    
+                    <!-- Botón para importar nuevos archivos al servidor -->
+                    <button id="importBtn" class="refresh-btn" style="border-color: #6a0dad; color: #b794f4;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        Importar Archivos
+                    </button>
+                </div>
             </div>
         </section>
 

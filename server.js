@@ -8,6 +8,7 @@ const { exec, execSync } = require('child_process');
 const multer = require('multer');
 const AdmZip = require('adm-zip');
 const mammoth = require('mammoth');
+const chokidar = require('chokidar');
 
 const NOTES_FILE = path.join(__dirname, 'notes.json');
 const ADJUNTOS_DIR = path.join(__dirname, 'adjuntos');
@@ -85,14 +86,14 @@ app.use('/imagenes', express.static(IMAGES_DIR));
 
 const JSON_CACHE_FILE = path.join(__dirname, 'public', 'data_index.json');
 
-// Endpoint to rebuild the JSON index
-app.post('/api/rebuild-index', (req, res) => {
+// Function to rebuild the JSON index
+async function rebuildIndex() {
     console.log("Rebuilding index...");
     try {
         const files = fs.readdirSync(DATA_DIR);
         const allRecords = [];
 
-        files.forEach(file => {
+        for (const file of files) {
             const filePath = path.join(DATA_DIR, file);
             const ext = path.extname(file).toLowerCase();
 
@@ -170,13 +171,23 @@ app.post('/api/rebuild-index', (req, res) => {
             } catch (fileError) {
                 console.error(`Error processing file ${file}:`, fileError);
             }
-        });
+        }
 
         fs.writeFileSync(JSON_CACHE_FILE, JSON.stringify(allRecords));
         console.log(`Index rebuilt successfully with ${allRecords.length} records.`);
-        res.json({ success: true, count: allRecords.length });
+        return allRecords.length;
     } catch (error) {
         console.error("Index rebuild error:", error);
+        throw error;
+    }
+}
+
+// Endpoint to rebuild the JSON index manually
+app.post('/api/rebuild-index', async (req, res) => {
+    try {
+        const count = await rebuildIndex();
+        res.json({ success: true, count: count });
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
@@ -362,4 +373,23 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
     console.log("Backend simplified. Frontend now handles data indexing via Web Workers.");
+
+    // Initial rebuild on startup
+    rebuildIndex().catch(err => console.error("Initial rebuild failed:", err));
+
+    // Setup file watcher for automatic updates
+    let debounceTimer;
+    const watcher = chokidar.watch(DATA_DIR, {
+        ignoreInitial: true,
+        persistent: true
+    });
+
+    watcher.on('all', (event, filePath) => {
+        console.log(`File change detected: ${event} on ${filePath}`);
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            console.log("Triggering automatic index rebuild...");
+            rebuildIndex().catch(err => console.error("Automatic rebuild failed:", err));
+        }, 2000); // 2 second debounce
+    });
 });
