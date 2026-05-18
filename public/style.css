@@ -10,6 +10,24 @@
     --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
+body.theme-ahpna {
+    --accent: #66fcf1;
+    --accent-dark: #45a29e;
+    --card-border: rgba(102, 252, 241, 0.1);
+}
+
+body.theme-urbanismo {
+    --accent: #a8e6cf;
+    --accent-dark: #3d8c40;
+    --card-border: rgba(168, 230, 207, 0.1);
+}
+
+body.theme-ama {
+    --accent: #ff8b94;
+    --accent-dark: #d33f49;
+    --card-border: rgba(255, 139, 148, 0.1);
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -311,6 +329,7 @@ header p {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    min-width: 0;
 }
 
 .filter-group label {
@@ -322,6 +341,7 @@ header p {
 }
 
 .filter-group input, .filter-group select {
+    width: 100%;
     padding: 0.75rem;
     background: rgba(31, 40, 51, 0.8);
     border: 1px solid var(--card-border);
@@ -330,6 +350,9 @@ header p {
     font-size: 0.9rem;
     outline: none;
     transition: var(--transition);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .filter-group select option {
@@ -980,3 +1003,63 @@ header p {
     }
 }
 
+.top-nav {
+    margin-bottom: 2rem;
+    width: 100%;
+    display: flex;
+}
+
+.back-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: var(--transition);
+    padding: 0.5rem 1rem;
+    background: rgba(31, 40, 51, 0.4);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+}
+
+.back-link:hover {
+    color: var(--accent-dark);
+    background: rgba(31, 40, 51, 0.8);
+}
+
+
+
+/* File Manager Sidebar Styles */
+.file-manager-list { display: flex; flex-direction: column; gap: 1rem; }
+
+.file-manager-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; transition: var(--transition); }
+
+.file-manager-item:hover { background: rgba(255, 255, 255, 0.07); border-color: var(--accent); }
+
+.file-manager-item .file-name { flex: 1; white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; overflow-wrap: break-word; margin-right: 0.5rem; font-size: 0.85rem; line-height: 1.3; color: var(--text-primary); }
+
+.file-manager-actions { display: flex; gap: 0.5rem; }
+
+.action-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: var(--text-secondary); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition); }
+
+.action-btn svg { width: 16px; height: 16px; }
+
+.action-btn.download-btn:hover { background: rgba(102, 252, 241, 0.2); color: var(--accent); border-color: var(--accent); }
+
+
+
+.action-btn.delete-btn:hover { background: rgba(244, 67, 54, 0.2); color: #f44336; border-color: #f44336; }
+
+
+/* Custom Confirm Modal Styles */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); z-index: 3000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: var(--transition); }
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal-content { background: rgba(11, 12, 16, 0.95); border: 1px solid var(--card-border); border-radius: 12px; padding: 2rem; max-width: 400px; width: 90%; text-align: center; transform: translateY(20px); transition: var(--transition); }
+.modal-overlay.open .modal-content { transform: translateY(0); }
+.modal-content h3 { color: var(--accent); margin-bottom: 1rem; font-family: 'Outfit', sans-serif; }
+.modal-content p { color: var(--text-primary); margin-bottom: 2rem; font-size: 0.95rem; }
+.modal-actions { display: flex; justify-content: center; gap: 1rem; }
+.modal-actions button { padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; transition: var(--transition); font-family: inherit; }
+.btn-cancel { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); }
+.btn-cancel:hover { background: rgba(255, 255, 255, 0.2); }
+.btn-delete { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.3); }
+.btn-delete:hover { background: rgba(244, 67, 54, 0.2); border-color: rgba(244, 67, 54, 0.5); }

@@ -1,0 +1,184 @@
+<!DOCTYPE html> <!-- Define el tipo de documento como HTML5 -->
+<html lang="es"> <!-- Inicia el documento HTML y establece el idioma en español -->
+
+<head>
+    <meta charset="UTF-8"> <!-- Establece la codificación de caracteres a UTF-8 (soporta tildes y ñ) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Asegura que la web sea responsiva en móviles -->
+    <title>Urbanismo - Buscador</title> <!-- Título que aparece en la pestaña del navegador -->
+    
+    <!-- Fuentes de Google para una tipografía moderna (Outfit e Inter) -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    
+    <!-- Enlace al archivo CSS externo para los estilos visuales -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Biblioteca Dexie.js para gestionar la base de datos local IndexedDB del navegador -->
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+</head>
+
+<body class="theme-urbanismo">
+    <!-- Elementos visuales de fondo (esferas brillantes con movimiento) -->
+    <div class="background-elements">
+        <div class="glow-orb" id="orb1"></div> <!-- Primera esfera brillante -->
+        <div class="glow-orb" id="orb2"></div> <!-- Segunda esfera brillante -->
+    </div>
+
+    <main class="container"> <!-- Contenedor principal centrado de la aplicación -->
+        <div class="top-nav">
+            <a href="index.html" class="back-link">← Volver al Índice</a>
+        </div>
+        <header>
+            <h1>Urbanismo</h1> <!-- Título principal de la página -->
+            <p>Planeamiento y expedientes urbanísticos</p> <!-- Descripción del servicio -->
+        </header>
+
+        <section class="search-section"> <!-- Sección que contiene la caja de búsqueda y filtros -->
+            <div class="search-box"> <!-- Contenedor de la barra de búsqueda principal -->
+                <!-- Icono de lupa (SVG) -->
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <!-- Campo de entrada de texto para la búsqueda rápida -->
+                <input type="text" id="searchInput" placeholder="Búsqueda rápida (ej: Juan Pérez 1789)..."
+                    autocomplete="off">
+                
+                <!-- Botón para mostrar/ocultar el panel de búsqueda avanzada -->
+                <button id="advancedSearchToggle" class="advanced-toggle-btn" title="Búsqueda Avanzada">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                </button>
+                
+                <!-- Botón para limpiar el texto de búsqueda (oculto por defecto) -->
+                <button id="clearBtn" class="clear-btn hidden" aria-label="Limpiar búsqueda">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Panel de Búsqueda Avanzada (filtros adicionales) -->
+            <div id="advancedPanel" class="advanced-panel hidden">
+                <div class="advanced-grid">
+                    <!-- Filtro por año o fecha -->
+                    <div class="filter-group">
+                        <label for="filterYear">Año / Fecha</label>
+                        <input type="text" id="filterYear" placeholder="Ej: 1890">
+                    </div>
+                    <!-- Filtro por nombre de archivo original -->
+                    <div class="filter-group">
+                        <label for="filterFile">Sección / Archivo</label>
+                        <select id="filterFile">
+                            <option value="">Todos los archivos</option>
+                        </select>
+                    </div>
+                    <!-- Filtro por campo de observaciones o tipo de documento -->
+                    <div class="filter-group">
+                        <label for="filterDoc">OBSERVACIONES</label>
+                        <input type="text" id="filterDoc" placeholder="Ej: Pasaporte">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra de estado con contador de resultados y botones de acción -->
+            <div class="status-bar">
+                <span id="resultCount" class="result-count">Escriba para empezar a buscar.</span>
+                <div class="action-buttons">
+                    <!-- Botón para refrescar los datos desde el servidor -->
+                    <button id="refreshBtn" class="refresh-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                        Actualizar Carpeta
+                    </button>
+                    
+                    <!-- Botón para gestionar archivos del servidor -->
+                    <button id="manageFilesBtn" class="refresh-btn" style="border-color: #3182ce; color: #63b3ed;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="9" y1="3" x2="9" y2="21"></line>
+                        </svg>
+                        Gestión Archivos
+                    </button>
+                    
+                    <!-- Entrada de archivos oculta (se activa mediante JS) -->
+                    <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.ods,.odb,.accdb,.mdb,.jpg,.jpeg,.png,.gif" style="display:none">
+                    
+                    <!-- Botón para importar nuevos archivos al servidor -->
+                    <button id="importBtn" class="refresh-btn" style="border-color: #6a0dad; color: #b794f4;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        Importar Archivos
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contenedor donde se inyectarán las tarjetas de resultados de búsqueda -->
+        <section class="results-section" id="resultsContainer">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-icon"></div>
+                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Barra lateral (Sidebar) para mostrar detalles extendidos y notas editables -->
+    <div id="notesSidebar" class="sidebar">
+        <div class="sidebar-content">
+            <div class="sidebar-header">
+                <h2>Detalles y Notas</h2>
+                <!-- Botón para cerrar la barra lateral -->
+                <button id="closeSidebar" class="close-btn">&times;</button>
+            </div>
+            <div id="sidebarBody" class="sidebar-body">
+                <!-- El contenido de la ficha técnica se inyecta dinámicamente mediante JavaScript -->
+            </div>
+        </div>
+        <!-- Fondo oscuro semitransparente que aparece al abrir la barra lateral -->
+        <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    </div>
+
+    <!-- Barra lateral para Gestionar Archivos -->
+    <div id="fileManagerSidebar" class="sidebar">
+        <div class="sidebar-content">
+            <div class="sidebar-header">
+                <h2>Gestión de Archivos</h2>
+                <button id="closeFileManager" class="close-btn">&times;</button>
+            </div>
+            <div id="fileManagerBody" class="sidebar-body file-manager-list">
+                <!-- La lista de archivos se inyectará aquí dinámicamente -->
+            </div>
+        </div>
+        <div id="fileManagerOverlay" class="sidebar-overlay"></div>
+    </div>
+
+    <!-- Modal de Confirmación -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="confirmModalTitle">Confirmar borrado</h3>
+            <p id="confirmModalMessage">¿Estás seguro de que quieres borrar este archivo?</p>
+            <div class="modal-actions">
+                <button id="confirmModalCancel" class="btn-cancel">Cancelar</button>
+                <button id="confirmModalAccept" class="btn-delete">Borrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enlace al archivo JavaScript principal que maneja la lógica de la aplicación -->
+    <script src="app.js"></script>
+</body>
+</html>

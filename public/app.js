@@ -12,17 +12,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarBody = document.getElementById('sidebarBody'); // Cuerpo de la barra lateral
     const closeSidebar = document.getElementById('closeSidebar'); // Botón para cerrar la barra lateral
     const sidebarOverlay = document.getElementById('sidebarOverlay'); // Fondo oscuro de la barra lateral
+    
+    const manageFilesBtn = document.getElementById('manageFilesBtn'); // Botón para abrir gestor de archivos
+    const fileManagerSidebar = document.getElementById('fileManagerSidebar'); // Barra lateral de gestor de archivos
+    const closeFileManager = document.getElementById('closeFileManager'); // Botón para cerrar gestor de archivos
+    const fileManagerOverlay = document.getElementById('fileManagerOverlay'); // Fondo oscuro del gestor de archivos
+    const fileManagerBody = document.getElementById('fileManagerBody'); // Cuerpo del gestor de archivos
 
     // Variables de estado global de la aplicación
     let currentRenderIndex = 0; // Índice actual para el scroll infinito
     const CHUNK_SIZE = 50; // Cantidad de resultados que se cargan por bloque
     let currentQuery = ""; // Almacena la consulta de búsqueda actual
     let isWorkerReady = false; // Indica si el Worker de búsqueda está listo
+    let pendingSearch = false; // Indica si hay una búsqueda en cola
     let isLoadingMore = false; // Indica si se están cargando más resultados (scroll)
     let hasMoreResults = true; // Indica si hay más resultados disponibles en el Worker
     let debounceTimer; // Temporizador para evitar búsquedas excesivas mientras se escribe
     let recordNotes = {}; // Almacena las notas/fichas técnicas guardadas en el servidor
     let lastSearchResults = []; // Copia de los últimos resultados para acceso rápido por índice
+
+    // Determinar la sección actual basada en la URL
+    const pathName = window.location.pathname.toLowerCase();
+    let currentSection = 'ahpna';
+    if (pathName.includes('urbanismo')) currentSection = 'urbanismo';
+    else if (pathName.includes('ama')) currentSection = 'ama';
 
     // Lógica de Búsqueda Avanzada
     const advancedSearchToggle = document.getElementById('advancedSearchToggle'); // Botón de toggle
@@ -30,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterYear = document.getElementById('filterYear'); // Filtro de año
     const filterFile = document.getElementById('filterFile'); // Filtro de archivo original
     const filterDoc = document.getElementById('filterDoc'); // Filtro de observaciones
+    const filterNotary = document.getElementById('filterNotary'); // Filtro de Notario
 
     // Inicialización del Web Worker para realizar búsquedas en segundo plano sin bloquear la UI
     const searchWorker = new Worker('search-worker.js');
@@ -41,7 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Añade eventos a los filtros avanzados para disparar la búsqueda al cambiar sus valores
-    [filterYear, filterFile, filterDoc].forEach(el => {
+    const filtersToListen = [filterYear, filterFile, filterDoc];
+    if (filterNotary) filtersToListen.push(filterNotary);
+    
+    filtersToListen.forEach(el => {
+        if (!el) return;
         const eventType = el.tagName === 'SELECT' ? 'change' : 'input';
         el.addEventListener(eventType, () => {
             clearTimeout(debounceTimer);
@@ -65,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         filterYear.value = '';
         filterDoc.value = '';
         filterFile.value = '';
+        if (filterNotary) filterNotary.value = '';
         clearBtn.classList.add('hidden');
         performSearch(""); // Vuelve al estado inicial
     });
@@ -87,15 +106,15 @@ document.addEventListener('DOMContentLoaded', () => {
     async function triggerRebuild(skipConfirm = false) {
         if (!skipConfirm && !confirm("Esto procesará todos los archivos en el servidor. ¿Continuar?")) return;
 
-        resultCount.textContent = 'Generando índice en servidor...';
+        resultCount.textContent = 'Reconstruyendo índice de búsqueda...';
         
         try {
-            const response = await fetch('/api/rebuild-index', { method: 'POST' });
+            const response = await fetch(`/api/rebuild-index?section=${currentSection}`, { method: 'POST' });
             const data = await response.json();
             if (data.success) {
                 resultCount.textContent = `¡Hecho! ${data.count} registros optimizados.`;
                 // Notifica al Worker que cargue el nuevo archivo JSON generado
-                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
+                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: `/data_index_${currentSection}.json` } });
             }
         } catch (err) {
             resultCount.textContent = 'Error al optimizar.';
@@ -117,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         files.forEach(f => formData.append('files', f)); // Prepara los archivos para el envío
 
         try {
-            const response = await fetch('/api/upload', {
+            const response = await fetch(`/api/upload?section=${currentSection}`, {
                 method: 'POST',
                 body: formData
             });
@@ -150,7 +169,12 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshBtn.classList.remove('loading');
             importBtn.classList.remove('loading');
             if (payload.files) updateFileFilter(payload.files); // Actualiza el selector de archivos
-            performSearch(searchInput.value.trim()); // Realiza la búsqueda inicial si hay texto
+            if (payload.notaries) updateNotaryFilter(payload.notaries); // Actualiza el selector de notarios
+            
+            // Realiza la búsqueda inicial si hay texto, filtros, o si el usuario intentó buscar antes
+            if (pendingSearch || searchInput.value.trim() || filterYear.value.trim() || filterFile.value || filterDoc.value.trim() || (filterNotary && filterNotary.value)) {
+                performSearch(searchInput.value.trim()); 
+            }
         } else if (type === 'SEARCH_RESULTS') {
             // El Worker devuelve resultados de una búsqueda
             if (meta.offset === 0) {
@@ -182,15 +206,56 @@ document.addEventListener('DOMContentLoaded', () => {
         filterFile.value = current;
     }
 
+    // Actualiza las opciones del desplegable de "Notario" basándose en los datos cargados
+    function updateNotaryFilter(notaries) {
+        if (!filterNotary) return;
+        const current = filterNotary.value;
+        filterNotary.innerHTML = '<option value="">Todos los notarios</option>';
+        
+        if (notaries && notaries.length > 0) {
+            document.getElementById('notaryFilterGroup').style.display = 'flex';
+            [...new Set(notaries)].sort().forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = n;
+                opt.textContent = n;
+                filterNotary.appendChild(opt);
+            });
+            filterNotary.value = current;
+        } else {
+            document.getElementById('notaryFilterGroup').style.display = 'none';
+        }
+    }
+
     // Envía una solicitud de búsqueda al Worker
     function performSearch(query) {
-        if (!isWorkerReady) return;
         currentQuery = query;
         currentRenderIndex = 0;
         hasMoreResults = true;
 
+        if (!isWorkerReady) {
+            pendingSearch = true;
+            // Si el usuario borró todo, no marcamos como pendiente real
+            if (!query && !filterYear.value.trim() && !filterFile.value && !filterDoc.value.trim() && (!filterNotary || !filterNotary.value)) {
+                pendingSearch = false;
+                resultsContainer.innerHTML = '';
+                const emptyState = document.getElementById('emptyState');
+                if (emptyState) {
+                    resultsContainer.appendChild(emptyState);
+                    emptyState.classList.remove('hidden');
+                }
+                resultCount.textContent = 'Cargando base de datos...';
+                return;
+            }
+
+            resultsContainer.innerHTML = '<div class="spinner"></div>';
+            resultCount.textContent = 'Preparando índice... La búsqueda comenzará enseguida.';
+            return;
+        }
+
+        pendingSearch = false;
+
         // Si no hay nada que buscar y no hay filtros, muestra el estado vacío
-        if (!query && !filterYear.value.trim() && !filterFile.value && !filterDoc.value.trim()) {
+        if (!query && !filterYear.value.trim() && !filterFile.value && !filterDoc.value.trim() && (!filterNotary || !filterNotary.value)) {
             resultsContainer.innerHTML = '';
             const emptyState = document.getElementById('emptyState');
             if (emptyState) {
@@ -207,7 +272,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const filters = {
             year: filterYear.value.trim(),
             file: filterFile.value,
-            doc: filterDoc.value.trim()
+            doc: filterDoc.value.trim(),
+            notary: filterNotary ? filterNotary.value : ""
         };
 
         // Muestra un spinner de carga
@@ -227,7 +293,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const filters = {
             year: filterYear.value.trim(),
             file: filterFile.value,
-            doc: filterDoc.value.trim()
+            doc: filterDoc.value.trim(),
+            notary: filterNotary ? filterNotary.value : ""
         };
 
         searchWorker.postMessage({ 
@@ -263,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if ((lowKey.includes('foto') || lowKey.includes('imagen') || lowKey.includes('ruta')) && val) {
                 const cleanVal = String(val).trim();
                 return (cleanVal.includes('/') || cleanVal.includes('\\')) 
-                    ? `/api/file?path=${encodeURIComponent(cleanVal)}` // Ruta absoluta en el servidor
+                    ? `/api/file?path=${encodeURIComponent(cleanVal)}&section=${currentSection}` // Ruta absoluta en el servidor
                     : `/imagenes/${encodeURIComponent(cleanVal)}`; // Nombre de archivo en carpeta /imagenes
             }
         }
@@ -415,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append('file', file);
 
                 // El servidor procesa el archivo y extrae los campos clave
-                const parseResp = await fetch('/api/parse-sidebar-file', {
+                const parseResp = await fetch(`/api/parse-sidebar-file?section=${currentSection}`, {
                     method: 'POST',
                     body: formData
                 });
@@ -426,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newData = { ...recordNotes[id], ...parsedFields };
 
                 // Guarda la ficha procesada en la base de datos de notas del servidor
-                const saveResp = await fetch('/api/save-note', {
+                const saveResp = await fetch(`/api/save-note?section=${currentSection}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id, note: newData })
@@ -462,7 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.textContent = 'Guardando...';
         
         try {
-            const response = await fetch('/api/save-note', {
+            const response = await fetch(`/api/save-note?section=${currentSection}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id, note: data })
@@ -483,6 +550,110 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error saving note:', error);
             btn.textContent = 'Error';
             btn.disabled = false;
+        }
+    };
+
+    // Lógica del Gestor de Archivos Lateral
+    if (manageFilesBtn) {
+        manageFilesBtn.addEventListener('click', async () => {
+            fileManagerSidebar.classList.add('open');
+            await loadFileManagerFiles();
+        });
+    }
+
+    if (closeFileManager && fileManagerOverlay) {
+        [closeFileManager, fileManagerOverlay].forEach(el => {
+            el.addEventListener('click', () => {
+                fileManagerSidebar.classList.remove('open');
+            });
+        });
+    }
+
+    async function loadFileManagerFiles() {
+        if (!fileManagerBody) return;
+        fileManagerBody.innerHTML = '<div class="spinner"></div>';
+        try {
+            const resp = await fetch(`/api/files?section=${currentSection}`);
+            const data = await resp.json();
+            
+            if (!data.files || data.files.length === 0) {
+                fileManagerBody.innerHTML = '<div class="empty-state"><p>No hay archivos en esta sección.</p></div>';
+                return;
+            }
+
+            let html = '<div class="file-manager-list">';
+            data.files.forEach(file => {
+                html += `
+                    <div class="file-manager-item">
+                        <div class="file-name" title="${escapeHTML(file)}">${escapeHTML(file)}</div>
+                        <div class="file-manager-actions">
+                            <button class="action-btn download-btn" title="Descargar" onclick="window.open('/data/${currentSection}/${encodeURIComponent(file)}', '_blank')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            </button>
+                            <button class="action-btn delete-btn" title="Borrar" onclick="window.deleteFile('${escapeHTML(file).replace(/'/g, "\\'")}')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            fileManagerBody.innerHTML = html;
+        } catch (err) {
+            fileManagerBody.innerHTML = '<p>Error al cargar archivos.</p>';
+            console.error(err);
+        }
+    }
+
+    // Lógica del modal de confirmación personalizado
+    function customConfirm(message, title = 'Confirmar') {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('confirmModal');
+            const titleEl = document.getElementById('confirmModalTitle');
+            const messageEl = document.getElementById('confirmModalMessage');
+            const acceptBtn = document.getElementById('confirmModalAccept');
+            const cancelBtn = document.getElementById('confirmModalCancel');
+
+            if (!modal) {
+                resolve(confirm(message));
+                return;
+            }
+
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            modal.classList.add('open');
+
+            const cleanup = () => {
+                acceptBtn.removeEventListener('click', onAccept);
+                cancelBtn.removeEventListener('click', onCancel);
+                modal.classList.remove('open');
+            };
+
+            const onAccept = () => { cleanup(); resolve(true); };
+            const onCancel = () => { cleanup(); resolve(false); };
+
+            acceptBtn.addEventListener('click', onAccept);
+            cancelBtn.addEventListener('click', onCancel);
+        });
+    }
+
+    window.deleteFile = async (filename) => {
+        const isConfirmed = await customConfirm(`¿Estás seguro de que quieres borrar el archivo "${filename}"? Esta acción no se puede deshacer.`, 'Confirmar Borrado');
+        if (!isConfirmed) return;
+
+        try {
+            const res = await fetch(`/api/files/${encodeURIComponent(filename)}?section=${currentSection}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            if (data.success) {
+                await loadFileManagerFiles();
+                triggerRebuild(true);
+            } else {
+                alert("Error al borrar: " + data.error);
+            }
+        } catch (err) {
+            alert("Error de conexión al borrar.");
         }
     };
 
@@ -541,26 +712,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicializa los datos de la aplicación al cargar la página
     async function initData() {
+        resultCount.textContent = 'Cargando base de datos y preparando búsqueda...';
+        refreshBtn.classList.add('loading');
         try {
             // Recupera todas las notas guardadas desde el servidor
-            const nResp = await fetch('/api/notes');
+            const nResp = await fetch(`/api/notes?section=${currentSection}`);
             if (nResp.ok) {
                 recordNotes = await nResp.json();
                 searchWorker.postMessage({ type: 'LOAD_NOTES', payload: recordNotes });
             }
 
             // Verifica si el índice optimizado existe en el servidor
-            const resp = await fetch('/api/index-status');
+            const resp = await fetch(`/api/index-status?section=${currentSection}`);
             const status = await resp.json();
             if (status.exists) {
                 // Carga el JSON gigante de datos indexados
-                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: '/data_index.json' } });
+                searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: `/data_index_${currentSection}.json` } });
             } else {
                 // Si no hay índice, intenta cargar los archivos brutos directamente
-                const fResp = await fetch('/api/files');
+                const fResp = await fetch(`/api/files?section=${currentSection}`);
                 const fData = await fResp.json();
                 if (fData.files?.length > 0) {
-                    searchWorker.postMessage({ type: 'LOAD_FILES', payload: { files: fData.files, isLocalFiles: false } });
+                    searchWorker.postMessage({ type: 'LOAD_FILES', payload: { files: fData.files, isLocalFiles: false, section: currentSection } });
                 }
             }
         } catch (e) {

@@ -9,25 +9,78 @@ const multer = require('multer');
 const AdmZip = require('adm-zip');
 const mammoth = require('mammoth');
 const chokidar = require('chokidar');
+const { Pool } = require('pg');
 
-const NOTES_FILE = path.join(__dirname, 'notes.json');
-const ADJUNTOS_DIR = path.join(__dirname, 'adjuntos');
-if (!fs.existsSync(NOTES_FILE)) {
-    fs.writeFileSync(NOTES_FILE, JSON.stringify({}));
+const pool = new Pool({
+    user: 'postgres',
+    host: 'localhost',
+    database: 'postgres',
+    password: '1234',
+    port: 5432,
+});
+
+async function initDB() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS records (
+                id SERIAL PRIMARY KEY,
+                section VARCHAR(255),
+                file VARCHAR(255),
+                sheet VARCHAR(255),
+                row_num INT,
+                data JSONB
+            )
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS notes (
+                id VARCHAR(255) PRIMARY KEY,
+                section VARCHAR(255),
+                note JSONB
+            )
+        `);
+        console.log("PostgreSQL database tables initialized.");
+    } catch (err) {
+        console.error("Error initializing database:", err);
+    }
 }
-if (!fs.existsSync(ADJUNTOS_DIR)) {
-    fs.mkdirSync(ADJUNTOS_DIR, { recursive: true });
+const dbInitPromise = initDB();
+
+const app = express();
+const PORT = 3000;
+
+app.use(cors());
+app.use(express.json());
+
+const SECTIONS = ['ahpna', 'urbanismo', 'ama'];
+
+const BASE_DIRS = {
+    data: path.join(__dirname, 'data'),
+    adjuntos: path.join(__dirname, 'adjuntos'),
+    imagenes: path.join(__dirname, 'imagenes')
+};
+
+// Create base and section directories
+Object.values(BASE_DIRS).forEach(dir => {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    SECTIONS.forEach(section => {
+        const sectionDir = path.join(dir, section);
+        if (!fs.existsSync(sectionDir)) fs.mkdirSync(sectionDir, { recursive: true });
+    });
+});
+
+function getValidSection(req) {
+    const section = req.query.section || req.body.section;
+    if (!SECTIONS.includes(section)) return 'ahpna'; // Default fallback
+    return section;
 }
-
-
-
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
+        const section = getValidSection(req);
         const ext = path.extname(file.originalname).toLowerCase();
         const isImage = ['.jpg', '.jpeg', '.png', '.gif'].includes(ext);
-        const dest = isImage ? path.join(__dirname, 'imagenes') : path.join(__dirname, 'data');
-        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+        const base = isImage ? BASE_DIRS.imagenes : BASE_DIRS.data;
+        const dest = path.join(base, section);
         cb(null, dest);
     },
     filename: (req, file, cb) => {
@@ -35,12 +88,6 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage });
-
-const app = express();
-const PORT = 3000;
-
-app.use(cors());
-app.use(express.json());
 
 // File upload endpoint
 app.post('/api/upload', upload.array('files'), (req, res) => {
@@ -55,17 +102,12 @@ app.post('/api/upload', upload.array('files'), (req, res) => {
 });
 app.use(express.static(path.join(__dirname, 'public')));
 
-const DATA_DIR = path.join(__dirname, 'data');
-let memoryDB = [];
-
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR);
-}
-
 // Endpoint to list files in the data directory
 app.get('/api/files', (req, res) => {
-    fs.readdir(DATA_DIR, (err, files) => {
+    const section = getValidSection(req);
+    const dataDir = path.join(BASE_DIRS.data, section);
+    
+    fs.readdir(dataDir, (err, files) => {
         if (err) return res.status(500).json({ error: "Error reading data folder" });
         
         const supportedFiles = files.filter(file => {
@@ -77,24 +119,40 @@ app.get('/api/files', (req, res) => {
     });
 });
 
-// Serve the data directory as static so the frontend can fetch the files
-app.use('/data', express.static(DATA_DIR));
-// Also serve an images directory if it exists
-const IMAGES_DIR = path.join(__dirname, 'imagenes');
-if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR);
-app.use('/imagenes', express.static(IMAGES_DIR));
+// Endpoint to delete a file
+app.delete('/api/files/:filename', (req, res) => {
+    try {
+        const section = getValidSection(req);
+        const filename = req.params.filename;
+        const filePath = path.join(BASE_DIRS.data, section, filename);
+        
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            res.json({ success: true, message: "File deleted successfully" });
+        } else {
+            res.status(404).json({ success: false, error: "File not found" });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
-const JSON_CACHE_FILE = path.join(__dirname, 'public', 'data_index.json');
+
+
+// Serve the directories as static so the frontend can fetch the files
+app.use('/data', express.static(BASE_DIRS.data));
+app.use('/imagenes', express.static(BASE_DIRS.imagenes));
 
 // Function to rebuild the JSON index
-async function rebuildIndex() {
-    console.log("Rebuilding index...");
+async function rebuildIndex(section) {
+    console.log(`Rebuilding index for section: ${section}...`);
     try {
-        const files = fs.readdirSync(DATA_DIR);
+        const dataDir = path.join(BASE_DIRS.data, section);
+        const files = fs.readdirSync(dataDir);
         const allRecords = [];
 
         for (const file of files) {
-            const filePath = path.join(DATA_DIR, file);
+            const filePath = path.join(dataDir, file);
             const ext = path.extname(file).toLowerCase();
 
             try {
@@ -173,11 +231,27 @@ async function rebuildIndex() {
             }
         }
 
-        fs.writeFileSync(JSON_CACHE_FILE, JSON.stringify(allRecords));
-        console.log(`Index rebuilt successfully with ${allRecords.length} records.`);
+        await pool.query('BEGIN');
+        await pool.query('DELETE FROM records WHERE section = $1', [section]);
+        const chunkSize = 1000;
+        for (let i = 0; i < allRecords.length; i += chunkSize) {
+            const chunk = allRecords.slice(i, i + chunkSize);
+            const values = [];
+            let queryStr = 'INSERT INTO records (section, file, sheet, row_num, data) VALUES ';
+            let paramIndex = 1;
+            chunk.forEach(record => {
+                queryStr += `($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}),`;
+                values.push(section, record.file, record.sheet, record.row, record.data);
+            });
+            queryStr = queryStr.slice(0, -1);
+            await pool.query(queryStr, values);
+        }
+        await pool.query('COMMIT');
+
+        console.log(`Index rebuilt successfully for ${section} with ${allRecords.length} records.`);
         return allRecords.length;
     } catch (error) {
-        console.error("Index rebuild error:", error);
+        console.error(`Index rebuild error for ${section}:`, error);
         throw error;
     }
 }
@@ -185,7 +259,8 @@ async function rebuildIndex() {
 // Endpoint to rebuild the JSON index manually
 app.post('/api/rebuild-index', async (req, res) => {
     try {
-        const count = await rebuildIndex();
+        const section = getValidSection(req);
+        const count = await rebuildIndex(section);
         res.json({ success: true, count: count });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -193,24 +268,42 @@ app.post('/api/rebuild-index', async (req, res) => {
 });
 
 // Endpoint to check if index exists
-app.get('/api/index-status', (req, res) => {
-    if (fs.existsSync(JSON_CACHE_FILE)) {
-        const stats = fs.statSync(JSON_CACHE_FILE);
-        res.json({ exists: true, size: stats.size, mtime: stats.mtime });
-    } else {
+app.get('/api/index-status', async (req, res) => {
+    try {
+        const section = getValidSection(req);
+        const result = await pool.query('SELECT COUNT(*) FROM records WHERE section = $1', [section]);
+        const count = parseInt(result.rows[0].count, 10);
+        if (count > 0) {
+            res.json({ exists: true, size: count * 100, mtime: new Date() });
+        } else {
+            res.json({ exists: false });
+        }
+    } catch (error) {
         res.json({ exists: false });
+    }
+});
+
+// New endpoint to serve data to frontend exactly like the old static file
+app.get('/data_index_:section.json', async (req, res) => {
+    try {
+        const section = req.params.section;
+        const result = await pool.query('SELECT file, sheet, row_num as row, data FROM records WHERE section = $1', [section]);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
 
 // Endpoint to serve a file by its path (useful for absolute paths if needed)
 app.get('/api/file', (req, res) => {
+    const section = getValidSection(req);
     const requestedPath = req.query.path;
     if (!requestedPath) return res.status(400).send('Path parameter is required');
 
     let fullPath = requestedPath;
     if (!path.isAbsolute(requestedPath)) {
-        fullPath = path.resolve(DATA_DIR, requestedPath);
+        fullPath = path.resolve(BASE_DIRS.data, section, requestedPath);
     }
 
     if (fs.existsSync(fullPath)) {
@@ -225,13 +318,14 @@ app.get('/api/file', (req, res) => {
 
 // Endpoint to OPEN a file or folder natively on the host machine
 app.get('/api/open-file', (req, res) => {
+    const section = getValidSection(req);
     const requestedPath = req.query.path;
     if (!requestedPath) return res.status(400).send('Path parameter is required');
 
     let fullPath = requestedPath;
     // Handle relative paths relative to data dir if not absolute
     if (!path.isAbsolute(requestedPath) && !requestedPath.includes(':')) {
-        fullPath = path.resolve(DATA_DIR, requestedPath);
+        fullPath = path.resolve(BASE_DIRS.data, section, requestedPath);
     }
 
     console.log(`Attempting to open: ${fullPath}`);
@@ -255,23 +349,30 @@ app.get('/api/open-file', (req, res) => {
 });
 
 // Notes endpoints
-app.get('/api/notes', (req, res) => {
+app.get('/api/notes', async (req, res) => {
     try {
-        const notes = JSON.parse(fs.readFileSync(NOTES_FILE, 'utf8'));
+        const section = getValidSection(req);
+        const result = await pool.query('SELECT id, note FROM notes WHERE section = $1', [section]);
+        const notes = {};
+        result.rows.forEach(row => {
+            notes[row.id] = row.note;
+        });
         res.json(notes);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.post('/api/save-note', (req, res) => {
+app.post('/api/save-note', async (req, res) => {
     try {
+        const section = getValidSection(req);
         const { id, note } = req.body;
         if (!id) return res.status(400).json({ error: "Missing record ID" });
         
-        const notes = JSON.parse(fs.readFileSync(NOTES_FILE, 'utf8'));
-        notes[id] = note;
-        fs.writeFileSync(NOTES_FILE, JSON.stringify(notes, null, 2));
+        await pool.query(
+            'INSERT INTO notes (id, section, note) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET note = EXCLUDED.note',
+            [id, section, note]
+        );
         
         res.json({ success: true });
     } catch (error) {
@@ -283,8 +384,9 @@ app.post('/api/save-note', (req, res) => {
 const attachmentUpload = multer({
     storage: multer.diskStorage({
         destination: (req, file, cb) => {
+            const section = getValidSection(req);
             const recordId = req.body.recordId;
-            const dest = path.join(ADJUNTOS_DIR, recordId.replace(/[^a-z0-9_-]/gi, '_'));
+            const dest = path.join(BASE_DIRS.adjuntos, section, recordId.replace(/[^a-z0-9_-]/gi, '_'));
             if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
             cb(null, dest);
         },
@@ -299,8 +401,9 @@ app.post('/api/upload-attachment', attachmentUpload.array('files'), (req, res) =
 });
 
 app.get('/api/attachments/:id', (req, res) => {
+    const section = getValidSection(req);
     const recordId = req.params.id.replace(/[^a-z0-9_-]/gi, '_');
-    const dest = path.join(ADJUNTOS_DIR, recordId);
+    const dest = path.join(BASE_DIRS.adjuntos, section, recordId);
     if (!fs.existsSync(dest)) return res.json({ files: [] });
     
     fs.readdir(dest, (err, files) => {
@@ -309,7 +412,7 @@ app.get('/api/attachments/:id', (req, res) => {
     });
 });
 
-app.use('/api/adjuntos', express.static(ADJUNTOS_DIR));
+app.use('/api/adjuntos', express.static(BASE_DIRS.adjuntos));
 
 app.post('/api/parse-sidebar-file', multer().single('file'), async (req, res) => {
     try {
@@ -330,13 +433,11 @@ app.post('/api/parse-sidebar-file', multer().single('file'), async (req, res) =>
         } else if (ext === '.odt') {
             const zip = new AdmZip(file.buffer);
             const contentXml = zip.readAsText("content.xml");
-            // Simple regex to extract text from ODT XML
             text = contentXml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
         } else {
             text = file.buffer.toString('utf8');
         }
 
-        // Parse text for KEY: Value pairs
         const data = {};
         const lines = text.split(/\r?\n/);
         const fields = [
@@ -364,32 +465,42 @@ app.post('/api/parse-sidebar-file', multer().single('file'), async (req, res) =>
     }
 });
 
-// Global error handler to ensure JSON responses
 app.use((err, req, res, next) => {
     console.error("Server Error:", err);
     res.status(500).json({ success: false, error: err.message || "Error interno del servidor" });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-    console.log("Backend simplified. Frontend now handles data indexing via Web Workers.");
+dbInitPromise.then(() => {
+    app.listen(PORT, () => {
+        console.log(`Server running at http://localhost:${PORT}`);
+        console.log("Backend simplified. Frontend now handles data indexing via Web Workers.");
 
-    // Initial rebuild on startup
-    rebuildIndex().catch(err => console.error("Initial rebuild failed:", err));
+        // Initial rebuild on startup for all sections
+        SECTIONS.forEach(section => {
+            rebuildIndex(section).catch(err => console.error(`Initial rebuild failed for ${section}:`, err));
+        });
 
-    // Setup file watcher for automatic updates
-    let debounceTimer;
-    const watcher = chokidar.watch(DATA_DIR, {
-        ignoreInitial: true,
-        persistent: true
-    });
+        // Setup file watcher for automatic updates
+        let debounceTimers = {};
+        const watcher = chokidar.watch(BASE_DIRS.data, {
+            ignoreInitial: true,
+            persistent: true
+        });
 
-    watcher.on('all', (event, filePath) => {
-        console.log(`File change detected: ${event} on ${filePath}`);
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            console.log("Triggering automatic index rebuild...");
-            rebuildIndex().catch(err => console.error("Automatic rebuild failed:", err));
-        }, 2000); // 2 second debounce
+        watcher.on('all', (event, filePath) => {
+            console.log(`File change detected: ${event} on ${filePath}`);
+            
+            // Determine which section changed
+            const relativePath = path.relative(BASE_DIRS.data, filePath);
+            const section = relativePath.split(path.sep)[0];
+            
+            if (SECTIONS.includes(section)) {
+                clearTimeout(debounceTimers[section]);
+                debounceTimers[section] = setTimeout(() => {
+                    console.log(`Triggering automatic index rebuild for ${section}...`);
+                    rebuildIndex(section).catch(err => console.error(`Automatic rebuild failed for ${section}:`, err));
+                }, 2000); // 2 second debounce
+            }
+        });
     });
 });

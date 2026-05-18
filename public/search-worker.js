@@ -3,6 +3,8 @@ importScripts('https://unpkg.com/dexie@latest/dist/dexie.js');
 importScripts('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
 
 let workerNotes = {}; // Almacena las notas de la barra lateral para poder buscar en ellas
+let allNotaries = new Set(); // Almacena los notarios únicos extraídos de los datos
+
 
 /**
  * ESQUEMA DE LA BASE DE DATOS DEL ARCHIVO
@@ -30,6 +32,7 @@ onmessage = async function(e) {
     if (type === 'LOAD_FILES') {
         const { files, isLocalFiles } = payload;
         await db.records.clear(); // Limpia la base de datos actual antes de cargar nuevos archivos
+        allNotaries.clear(); // Limpia los notarios guardados
         for (const fileData of files) {
             try {
                 let arrayBuffer, fileName;
@@ -60,6 +63,14 @@ onmessage = async function(e) {
                         const row = rows[i];
                         if (!row || row.every(c => c === "")) continue; // Salta filas vacías
                         const record = createRecord(fileName, sheetName, i + 1, row, headers, colMap);
+                        
+                        // Extraer notario
+                        for(const [k, v] of Object.entries(record.data)) {
+                            if (k.toLowerCase().includes('notario') && v) {
+                                allNotaries.add(String(v).trim());
+                            }
+                        }
+
                         batch.push(record);
                         
                         // Inserta en bloques de 500 para no bloquear el Worker
@@ -86,6 +97,7 @@ onmessage = async function(e) {
             const data = await response.json();
             
             await db.records.clear();
+            allNotaries.clear();
             const batch = [];
             for (const item of data) {
                 if (!item.data) continue;
@@ -93,6 +105,13 @@ onmessage = async function(e) {
                 const colMap = getColMap(headers);
                 const rowArray = headers.map(h => item.data[h]);
                 const record = createRecord(item.file, item.sheet, item.row, rowArray, headers, colMap);
+                
+                // Extraer notario
+                for(const [k, v] of Object.entries(item.data)) {
+                    if (k.toLowerCase().includes('notario') && v) {
+                        allNotaries.add(String(v).trim());
+                    }
+                }
                 
                 batch.push(record);
                 if (batch.length >= 1000) {
@@ -174,22 +193,39 @@ onmessage = async function(e) {
                 if (filters.file) {
                     queryChain = queryChain.where('file').equals(filters.file);
                 }
-                if (filters.year) {
-                    const yearStr = String(filters.year);
+                
+                if (filters.year || filters.doc || filters.notary) {
                     queryChain = queryChain.filter(r => {
-                        const rowText = Object.values(r.data).join(' ');
-                        return rowText.includes(yearStr);
-                    });
-                }
-                if (filters.doc) {
-                    const normDoc = normalizeText(filters.doc);
-                    queryChain = queryChain.filter(r => {
-                        const rowText = normalizeText(Object.values(r.data).join(' '));
-                        const id = `${r.file}-${r.sheet}-${r.row}`;
-                        const notes = workerNotes[id] || {};
-                        const notesText = normalizeText(Object.values(notes).join(' '));
+                        let match = true;
                         
-                        return rowText.includes(normDoc) || notesText.includes(normDoc);
+                        if (filters.year) {
+                            const yearStr = String(filters.year);
+                            const rowText = Object.values(r.data).join(' ');
+                            if (!rowText.includes(yearStr)) match = false;
+                        }
+                        
+                        if (match && filters.doc) {
+                            const normDoc = normalizeText(filters.doc);
+                            const rowText = normalizeText(Object.values(r.data).join(' '));
+                            const id = `${r.file}-${r.sheet}-${r.row}`;
+                            const notes = workerNotes[id] || {};
+                            const notesText = normalizeText(Object.values(notes).join(' '));
+                            
+                            if (!rowText.includes(normDoc) && !notesText.includes(normDoc)) match = false;
+                        }
+                        
+                        if (match && filters.notary) {
+                            let notaryMatch = false;
+                            for (const [key, val] of Object.entries(r.data)) {
+                                if (key.toLowerCase().includes('notario') && String(val).trim() === filters.notary) {
+                                    notaryMatch = true;
+                                    break;
+                                }
+                            }
+                            if (!notaryMatch) match = false;
+                        }
+                        
+                        return match;
                     });
                 }
             }
@@ -238,5 +274,5 @@ onmessage = async function(e) {
 async function sendReadyMessage() {
     const total = await db.records.count();
     const files = await db.records.orderBy('file').uniqueKeys();
-    postMessage({ type: 'READY', payload: { totalRecords: total, files: files } });
+    postMessage({ type: 'READY', payload: { totalRecords: total, files: files, notaries: Array.from(allNotaries).sort() } });
 }

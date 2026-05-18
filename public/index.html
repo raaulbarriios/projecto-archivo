@@ -1,146 +1,131 @@
-<!DOCTYPE html> <!-- Define el tipo de documento como HTML5 -->
-<html lang="es"> <!-- Inicia el documento HTML y establece el idioma en español -->
-
+<!DOCTYPE html>
+<html lang="es">
 <head>
-    <meta charset="UTF-8"> <!-- Establece la codificación de caracteres a UTF-8 (soporta tildes y ñ) -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Asegura que la web sea responsiva en móviles -->
-    <title>Buscador del Archivo Histórico</title> <!-- Título que aparece en la pestaña del navegador -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archivo Central - Inicio</title>
     
-    <!-- Fuentes de Google para una tipografía moderna (Outfit e Inter) -->
-    <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap"
-        rel="stylesheet">
+    <!-- Fuentes de Google -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
-    <!-- Enlace al archivo CSS externo para los estilos visuales -->
     <link rel="stylesheet" href="style.css">
-    
-    <!-- Biblioteca Dexie.js para gestionar la base de datos local IndexedDB del navegador -->
-    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <style>
+        /* Estilos específicos para la página de inicio */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+            background: radial-gradient(circle at center, #1f2833 0%, #0b0c10 100%);
+        }
+
+        .hub-title {
+            font-size: 3.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff, var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hub-subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin-bottom: 4rem;
+        }
+
+        .hub-grid {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 1000px;
+        }
+
+        .hub-card {
+            background: rgba(31, 40, 51, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 3rem 2rem;
+            width: 280px;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hub-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+            border-color: currentColor;
+        }
+
+        /* Colores específicos para los hover de cada tarjeta */
+        .hub-card.ahpna:hover {
+            color: #66fcf1;
+            box-shadow: 0 15px 40px rgba(102, 252, 241, 0.2);
+        }
+        .hub-card.urbanismo:hover {
+            color: #a8e6cf;
+            box-shadow: 0 15px 40px rgba(168, 230, 207, 0.2);
+        }
+        .hub-card.ama:hover {
+            color: #ff8b94;
+            box-shadow: 0 15px 40px rgba(255, 139, 148, 0.2);
+        }
+
+        .hub-icon {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .hub-card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .hub-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+    </style>
 </head>
-
 <body>
-    <!-- Elementos visuales de fondo (esferas brillantes con movimiento) -->
-    <div class="background-elements">
-        <div class="glow-orb" id="orb1"></div> <!-- Primera esfera brillante -->
-        <div class="glow-orb" id="orb2"></div> <!-- Segunda esfera brillante -->
+    <div class="background-effects">
+        <div class="glow-orb" style="top: 20%; left: 30%; background: radial-gradient(circle, rgba(102, 252, 241, 0.1) 0%, transparent 70%);"></div>
+        <div class="glow-orb" style="bottom: 20%; right: 30%; background: radial-gradient(circle, rgba(168, 230, 207, 0.1) 0%, transparent 70%);"></div>
     </div>
 
-    <main class="container"> <!-- Contenedor principal centrado de la aplicación -->
-        <header>
-            <h1>Archivo Histórico</h1> <!-- Título principal de la página -->
-            <p>Busque en todos los registros (pasaportes, multas, actas, etc.)</p> <!-- Descripción del servicio -->
-        </header>
+    <h1 class="hub-title">Archivo Central</h1>
+    <p class="hub-subtitle">Seleccione la base de datos que desea consultar</p>
 
-        <section class="search-section"> <!-- Sección que contiene la caja de búsqueda y filtros -->
-            <div class="search-box"> <!-- Contenedor de la barra de búsqueda principal -->
-                <!-- Icono de lupa (SVG) -->
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <!-- Campo de entrada de texto para la búsqueda rápida -->
-                <input type="text" id="searchInput" placeholder="Búsqueda rápida (ej: Juan Pérez 1789)..."
-                    autocomplete="off">
-                
-                <!-- Botón para mostrar/ocultar el panel de búsqueda avanzada -->
-                <button id="advancedSearchToggle" class="advanced-toggle-btn" title="Búsqueda Avanzada">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                    </svg>
-                </button>
-                
-                <!-- Botón para limpiar el texto de búsqueda (oculto por defecto) -->
-                <button id="clearBtn" class="clear-btn hidden" aria-label="Limpiar búsqueda">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
+    <div class="hub-grid">
+        <a href="ahpna.html" class="hub-card ahpna">
+            <div class="hub-icon">📜</div>
+            <h2>AHPNA</h2>
+            <p>Archivo Histórico de Protocolos Notariales</p>
+        </a>
 
-            <!-- Panel de Búsqueda Avanzada (filtros adicionales) -->
-            <div id="advancedPanel" class="advanced-panel hidden">
-                <div class="advanced-grid">
-                    <!-- Filtro por año o fecha -->
-                    <div class="filter-group">
-                        <label for="filterYear">Año / Fecha</label>
-                        <input type="text" id="filterYear" placeholder="Ej: 1890">
-                    </div>
-                    <!-- Filtro por nombre de archivo original -->
-                    <div class="filter-group">
-                        <label for="filterFile">Sección / Archivo</label>
-                        <select id="filterFile">
-                            <option value="">Todos los archivos</option>
-                        </select>
-                    </div>
-                    <!-- Filtro por campo de observaciones o tipo de documento -->
-                    <div class="filter-group">
-                        <label for="filterDoc">OBSERVACIONES</label>
-                        <input type="text" id="filterDoc" placeholder="Ej: Pasaporte">
-                    </div>
-                </div>
-            </div>
+        <a href="urbanismo.html" class="hub-card urbanismo">
+            <div class="hub-icon">🏗️</div>
+            <h2>Urbanismo</h2>
+            <p>Base de datos de expedientes y planeamiento urbano</p>
+        </a>
 
-            <!-- Barra de estado con contador de resultados y botones de acción -->
-            <div class="status-bar">
-                <span id="resultCount" class="result-count">Escriba para empezar a buscar.</span>
-                <div class="action-buttons">
-                    <!-- Botón para refrescar los datos desde el servidor -->
-                    <button id="refreshBtn" class="refresh-btn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                            stroke-linejoin="round">
-                            <polyline points="23 4 23 10 17 10"></polyline>
-                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                        </svg>
-                        Actualizar Carpeta
-                    </button>
-                    
-                    <!-- Entrada de archivos oculta (se activa mediante JS) -->
-                    <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv,.ods,.odb,.accdb,.mdb,.jpg,.jpeg,.png,.gif" style="display:none">
-                    
-                    <!-- Botón para importar nuevos archivos al servidor -->
-                    <button id="importBtn" class="refresh-btn" style="border-color: #6a0dad; color: #b794f4;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                            stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                        Importar Archivos
-                    </button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Contenedor donde se inyectarán las tarjetas de resultados de búsqueda -->
-        <section class="results-section" id="resultsContainer">
-            <div class="empty-state" id="emptyState">
-                <div class="empty-icon"></div>
-                <p>Las coincidencias se mostrarán aquí. El sistema buscará en todo el contenido de los Excel vinculados.</p>
-            </div>
-        </section>
-    </main>
-
-    <!-- Barra lateral (Sidebar) para mostrar detalles extendidos y notas editables -->
-    <div id="notesSidebar" class="sidebar">
-        <div class="sidebar-content">
-            <div class="sidebar-header">
-                <h2>Detalles y Notas</h2>
-                <!-- Botón para cerrar la barra lateral -->
-                <button id="closeSidebar" class="close-btn">&times;</button>
-            </div>
-            <div id="sidebarBody" class="sidebar-body">
-                <!-- El contenido de la ficha técnica se inyecta dinámicamente mediante JavaScript -->
-            </div>
-        </div>
-        <!-- Fondo oscuro semitransparente que aparece al abrir la barra lateral -->
-        <div id="sidebarOverlay" class="sidebar-overlay"></div>
+        <a href="ama.html" class="hub-card ama">
+            <div class="hub-icon">🏛️</div>
+            <h2>AMA</h2>
+            <p>Archivo Municipal de Algeciras</p>
+        </a>
     </div>
-
-    <!-- Enlace al archivo JavaScript principal que maneja la lógica de la aplicación -->
-    <script src="app.js"></script>
 </body>
 </html>
