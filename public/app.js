@@ -171,8 +171,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (payload.files) updateFileFilter(payload.files); // Actualiza el selector de archivos
             if (payload.notaries) updateNotaryFilter(payload.notaries); // Actualiza el selector de notarios
             
-            // Realiza la búsqueda inicial si hay texto, filtros, o si el usuario intentó buscar antes
-            if (pendingSearch || searchInput.value.trim() || filterYear.value.trim() || filterFile.value || filterDoc.value.trim() || (filterNotary && filterNotary.value)) {
+            // Realiza la búsqueda inicial si hay texto en el buscador principal, o si el usuario intentó buscar antes
+            if (pendingSearch || searchInput.value.trim()) {
                 performSearch(searchInput.value.trim()); 
             }
         } else if (type === 'SEARCH_RESULTS') {
@@ -234,8 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!isWorkerReady) {
             pendingSearch = true;
-            // Si el usuario borró todo, no marcamos como pendiente real
-            if (!query && !filterYear.value.trim() && !filterFile.value && !filterDoc.value.trim() && (!filterNotary || !filterNotary.value)) {
+            // Si el usuario borró el texto principal, no marcamos como pendiente real
+            if (!query) {
                 pendingSearch = false;
                 resultsContainer.innerHTML = '';
                 const emptyState = document.getElementById('emptyState');
@@ -254,8 +254,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         pendingSearch = false;
 
-        // Si no hay nada que buscar y no hay filtros, muestra el estado vacío
-        if (!query && !filterYear.value.trim() && !filterFile.value && !filterDoc.value.trim() && (!filterNotary || !filterNotary.value)) {
+        // Si no hay nada que buscar en el buscador principal, muestra el estado vacío
+        if (!query) {
             resultsContainer.innerHTML = '';
             const emptyState = document.getElementById('emptyState');
             if (emptyState) {
