@@ -331,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cleanVal = String(val).trim();
                 return (cleanVal.includes('/') || cleanVal.includes('\\')) 
                     ? `/api/file?path=${encodeURIComponent(cleanVal)}&section=${currentSection}` // Ruta absoluta en el servidor
-                    : `/imagenes/${encodeURIComponent(cleanVal)}`; // Nombre de archivo en carpeta /imagenes
+                    : `/imagenes/${currentSection}/${encodeURIComponent(cleanVal)}`; // Nombre de archivo en carpeta /imagenes
             }
         }
         
@@ -339,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const imgKeys = ['nombre', 'título', 'titulo', 'id', 'pasaporte', 'codigo de referencia', 'código de referencia'];
         for (const [key, val] of Object.entries(displayData)) {
             if (imgKeys.some(k => key.toLowerCase().includes(k)) && val) {
-                return `/imagenes/${encodeURIComponent(String(val).trim())}.jpg`;
+                return `/imagenes/${currentSection}/${encodeURIComponent(String(val).trim())}.jpg`;
             }
         }
         return null;
