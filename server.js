@@ -106,29 +106,85 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/files', (req, res) => {
     const section = getValidSection(req);
     const dataDir = path.join(BASE_DIRS.data, section);
-    
-    fs.readdir(dataDir, (err, files) => {
-        if (err) return res.status(500).json({ error: "Error reading data folder" });
+    const imagenesDir = path.join(BASE_DIRS.imagenes, section);
+    const adjuntosDir = path.join(BASE_DIRS.adjuntos, section);
+
+    try {
+        const getFiles = (dir) => fs.existsSync(dir) ? fs.readdirSync(dir) : [];
         
-        const supportedFiles = files.filter(file => {
+        // Data files
+        const dataFiles = getFiles(dataDir).filter(file => {
             const ext = path.extname(file).toLowerCase();
             return ['.xlsx', '.xls', '.csv', '.ods', '.accdb', '.mdb', '.odb'].includes(ext);
         });
-        
-        res.json({ files: supportedFiles });
-    });
+
+        // Imagenes (fotos)
+        const fotoFiles = getFiles(imagenesDir).filter(file => fs.lstatSync(path.join(imagenesDir, file)).isFile());
+
+        // Notas (adjuntos)
+        let notasFiles = [];
+        if (fs.existsSync(adjuntosDir)) {
+            const records = fs.readdirSync(adjuntosDir);
+            records.forEach(recordId => {
+                const recordPath = path.join(adjuntosDir, recordId);
+                if (fs.lstatSync(recordPath).isDirectory()) {
+                    const files = fs.readdirSync(recordPath);
+                    files.forEach(f => {
+                        notasFiles.push(`${recordId}/${f}`);
+                    });
+                }
+            });
+        }
+
+        res.json({ 
+            datos: dataFiles,
+            fotos: fotoFiles,
+            notas: notasFiles
+        });
+    } catch (err) {
+        res.status(500).json({ error: "Error reading folders: " + err.message });
+    }
 });
 
 // Endpoint to delete a file
-app.delete('/api/files/:filename', (req, res) => {
+app.delete('/api/files', async (req, res) => {
     try {
         const section = getValidSection(req);
-        const filename = req.params.filename;
-        const filePath = path.join(BASE_DIRS.data, section, filename);
+        const category = req.query.category || 'datos';
+        const filename = req.query.filepath;
         
-        if (fs.existsSync(filePath)) {
+        if (!category || !filename) return res.status(400).json({error: "Missing parameters"});
+        
+        let basePath;
+        if (category === 'datos') basePath = BASE_DIRS.data;
+        else if (category === 'fotos') basePath = BASE_DIRS.imagenes;
+        else if (category === 'notas') basePath = BASE_DIRS.adjuntos;
+        else return res.status(400).json({error: "Invalid category"});
+        
+        const filePath = path.resolve(basePath, section, filename);
+        
+        if (filePath.startsWith(path.resolve(basePath, section)) && fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
-            res.json({ success: true, message: "File deleted successfully" });
+            
+            let recordId = null;
+            if (category === 'notas') {
+                const parts = filename.split('/');
+                if (parts.length > 0) {
+                    const normId = parts[0];
+                    const dbNotes = await pool.query('SELECT id FROM notes WHERE section = $1', [section]);
+                    let realId = normId;
+                    for (let row of dbNotes.rows) {
+                        if (row.id.replace(/[^a-z0-9_-]/gi, '_') === normId) {
+                            realId = row.id;
+                            break;
+                        }
+                    }
+                    await pool.query('DELETE FROM notes WHERE id = $1 AND section = $2', [realId, section]);
+                    recordId = realId;
+                }
+            }
+            
+            res.json({ success: true, message: "File deleted successfully", recordId });
         } else {
             res.status(404).json({ success: false, error: "File not found" });
         }
@@ -142,6 +198,100 @@ app.delete('/api/files/:filename', (req, res) => {
 // Serve the directories as static so the frontend can fetch the files
 app.use('/data', express.static(BASE_DIRS.data));
 app.use('/imagenes', express.static(BASE_DIRS.imagenes));
+
+function extractDataFromSheet(sheet) {
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    if (rows.length === 0) return [];
+
+    let firstDataRow = 0;
+    while (firstDataRow < rows.length && rows[firstDataRow].every(cell => String(cell).trim() === "")) {
+        firstDataRow++;
+    }
+    if (firstDataRow >= rows.length) return [];
+
+    let headerEndIndex = firstDataRow;
+    let hitEmptyRow = false;
+    for (let i = firstDataRow; i < Math.min(firstDataRow + 5, rows.length); i++) {
+        const row = rows[i];
+        const isEmpty = row.every(cell => String(cell).trim() === "");
+        if (isEmpty) {
+            headerEndIndex = i - 1;
+            hitEmptyRow = true;
+            break;
+        }
+        const hasNumber = row.some(cell => typeof cell === 'number');
+        if (hasNumber && i > firstDataRow) {
+            headerEndIndex = i - 1;
+            break;
+        }
+    }
+
+    if (!hitEmptyRow && headerEndIndex === firstDataRow) {
+        const row0 = rows[firstDataRow];
+        const row1 = rows[firstDataRow + 1];
+        if (row1) {
+            let row1FillsGaps = false;
+            for (let c = 0; c < row1.length; c++) {
+                if (String(row0[c] || "").trim() === "" && String(row1[c] || "").trim() !== "") {
+                    row1FillsGaps = true;
+                    break;
+                }
+            }
+            if (row1FillsGaps) {
+                headerEndIndex = firstDataRow + 1;
+                const row2 = rows[firstDataRow + 2];
+                if (row2) {
+                    let row2FillsGaps = false;
+                    for (let c = 0; c < row2.length; c++) {
+                        if (String(row1[c] || "").trim() === "" && String(row2[c] || "").trim() !== "") {
+                            row2FillsGaps = true;
+                            break;
+                        }
+                    }
+                    if (row2FillsGaps) headerEndIndex = firstDataRow + 2;
+                }
+            }
+        }
+    }
+
+    const combinedHeaders = [];
+    const maxCols = Math.max(...rows.slice(firstDataRow, headerEndIndex + 1).map(r => r.length));
+    
+    for (let c = 0; c < maxCols; c++) {
+        const parts = [];
+        for (let r = firstDataRow; r <= headerEndIndex; r++) {
+            const val = String(rows[r][c] || "").trim();
+            if (val) parts.push(val);
+        }
+        let headerName = parts.join(" ");
+        if (!headerName) headerName = `__EMPTY_${c}`;
+        combinedHeaders.push(headerName);
+    }
+
+    const dataObjects = [];
+    let startDataRow = headerEndIndex + 1;
+    while (startDataRow < rows.length && rows[startDataRow].every(cell => String(cell).trim() === "")) {
+        startDataRow++;
+    }
+
+    for (let r = startDataRow; r < rows.length; r++) {
+        const row = rows[r];
+        if (row.every(cell => String(cell).trim() === "")) continue;
+        
+        const obj = {};
+        for (let c = 0; c < combinedHeaders.length; c++) {
+            const val = row[c];
+            if (val !== undefined && val !== "") {
+                obj[combinedHeaders[c]] = val;
+            }
+        }
+        if (Object.keys(obj).length > 0) {
+            dataObjects.push({ _rowNum: r + 1, ...obj });
+        }
+    }
+
+    return dataObjects;
+}
 
 // Function to rebuild the JSON index
 async function rebuildIndex(section) {
@@ -161,13 +311,15 @@ async function rebuildIndex(section) {
                     const workbook = xlsx.readFile(filePath);
                     workbook.SheetNames.forEach(sheetName => {
                         const sheet = workbook.Sheets[sheetName];
-                        const data = xlsx.utils.sheet_to_json(sheet);
-                        data.forEach((row, index) => {
+                        const data = extractDataFromSheet(sheet);
+                        data.forEach((rowObj) => {
+                            const rowNum = rowObj._rowNum;
+                            delete rowObj._rowNum;
                             allRecords.push({
                                 file: file,
                                 sheet: sheetName,
-                                row: index + 2, 
-                                data: row
+                                row: rowNum,
+                                data: rowObj
                             });
                         });
                     });
@@ -191,22 +343,22 @@ async function rebuildIndex(section) {
                     console.log(`Processing LibreOffice Base: ${file}`);
                     const tempDir = path.join(__dirname, 'temp_odb_' + Date.now());
                     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
-                    
+
                     const zip = new AdmZip(filePath);
                     zip.extractAllTo(tempDir, true);
-                    
+
                     const dbFolderPath = path.join(tempDir, 'database');
                     if (fs.existsSync(dbFolderPath)) {
                         const scriptPath = path.join(dbFolderPath, 'script');
                         const propertiesPath = path.join(dbFolderPath, 'properties');
                         const dataPath = path.join(dbFolderPath, 'data');
                         const backupPath = path.join(dbFolderPath, 'backup');
-                        
+
                         if (fs.existsSync(scriptPath)) fs.renameSync(scriptPath, path.join(dbFolderPath, 'db.script'));
                         if (fs.existsSync(propertiesPath)) fs.renameSync(propertiesPath, path.join(dbFolderPath, 'db.properties'));
                         if (fs.existsSync(dataPath)) fs.renameSync(dataPath, path.join(dbFolderPath, 'db.data'));
                         if (fs.existsSync(backupPath)) fs.renameSync(backupPath, path.join(dbFolderPath, 'db.backup'));
-                        
+
                         const javaCmd = `java -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -cp "lib/hsqldb.jar;." ReadOdb "${path.join(dbFolderPath, 'db')}"`;
                         try {
                             const rawBuffer = execSync(javaCmd, { cwd: __dirname, encoding: 'buffer', maxBuffer: 1024 * 1024 * 50 });
@@ -247,6 +399,35 @@ async function rebuildIndex(section) {
             await pool.query(queryStr, values);
         }
         await pool.query('COMMIT');
+
+        // Clean up orphan notes
+        await pool.query(`
+            DELETE FROM notes
+            WHERE section = $1
+            AND id NOT IN (
+                SELECT CONCAT(file, '-', sheet, '-', row_num)
+                FROM records 
+                WHERE section = $1
+            )
+        `, [section]);
+
+        // Clean up orphan files in adjuntos
+        const adjuntosDir = path.join(BASE_DIRS.adjuntos, section);
+        if (fs.existsSync(adjuntosDir)) {
+            const activeRecordsResult = await pool.query(`
+                SELECT CONCAT(file, '-', sheet, '-', row_num) as id
+                FROM records WHERE section = $1
+            `, [section]);
+            const activeNormalized = new Set(activeRecordsResult.rows.map(r => r.id.replace(/[^a-z0-9_-]/gi, '_')));
+            
+            const folders = fs.readdirSync(adjuntosDir);
+            folders.forEach(folder => {
+                const folderPath = path.join(adjuntosDir, folder);
+                if (fs.lstatSync(folderPath).isDirectory() && !activeNormalized.has(folder)) {
+                    fs.rmSync(folderPath, { recursive: true, force: true });
+                }
+            });
+        }
 
         console.log(`Index rebuilt successfully for ${section} with ${allRecords.length} records.`);
         return allRecords.length;
@@ -332,9 +513,9 @@ app.get('/api/open-file', (req, res) => {
 
     if (fs.existsSync(fullPath)) {
         // Command depends on OS
-        const command = process.platform === 'win32' ? 'start ""' : 
-                        process.platform === 'darwin' ? 'open' : 'xdg-open';
-        
+        const command = process.platform === 'win32' ? 'start ""' :
+            process.platform === 'darwin' ? 'open' : 'xdg-open';
+
         // Wrap in quotes to handle spaces
         exec(`${command} "${fullPath}"`, (error) => {
             if (error) {
@@ -368,12 +549,12 @@ app.post('/api/save-note', async (req, res) => {
         const section = getValidSection(req);
         const { id, note } = req.body;
         if (!id) return res.status(400).json({ error: "Missing record ID" });
-        
+
         await pool.query(
             'INSERT INTO notes (id, section, note) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET note = EXCLUDED.note',
             [id, section, note]
         );
-        
+
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -385,7 +566,7 @@ const attachmentUpload = multer({
     storage: multer.diskStorage({
         destination: (req, file, cb) => {
             const section = getValidSection(req);
-            const recordId = req.body.recordId;
+            const recordId = req.body.recordId || req.body.id;
             const dest = path.join(BASE_DIRS.adjuntos, section, recordId.replace(/[^a-z0-9_-]/gi, '_'));
             if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
             cb(null, dest);
@@ -405,7 +586,7 @@ app.get('/api/attachments/:id', (req, res) => {
     const recordId = req.params.id.replace(/[^a-z0-9_-]/gi, '_');
     const dest = path.join(BASE_DIRS.adjuntos, section, recordId);
     if (!fs.existsSync(dest)) return res.json({ files: [] });
-    
+
     fs.readdir(dest, (err, files) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ files });
@@ -414,10 +595,12 @@ app.get('/api/attachments/:id', (req, res) => {
 
 app.use('/api/adjuntos', express.static(BASE_DIRS.adjuntos));
 
-app.post('/api/parse-sidebar-file', multer().single('file'), async (req, res) => {
+app.post('/api/parse-sidebar-file', attachmentUpload.single('file'), async (req, res) => {
     try {
         const file = req.file;
         if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+        file.buffer = fs.readFileSync(file.path);
 
         const ext = path.extname(file.originalname).toLowerCase();
         let text = "";
@@ -443,7 +626,7 @@ app.post('/api/parse-sidebar-file', multer().single('file'), async (req, res) =>
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = xlsx.utils.sheet_to_json(firstSheet, { header: 1 });
-            
+
             let isHorizontal = false;
             if (rows.length >= 2 && rows[0].length > 2) {
                 const headerMatches = rows[0].filter(h => h && normTargetFields.includes(normalizeKey(h)));
@@ -483,7 +666,7 @@ app.post('/api/parse-sidebar-file', multer().single('file'), async (req, res) =>
             let key = '';
             let val = '';
             const sepIndex = line.indexOf(':');
-            
+
             if (sepIndex !== -1) {
                 key = line.substring(0, sepIndex).trim();
                 val = line.substring(sepIndex + 1).trim();
@@ -535,11 +718,11 @@ dbInitPromise.then(() => {
 
         watcher.on('all', (event, filePath) => {
             console.log(`File change detected: ${event} on ${filePath}`);
-            
+
             // Determine which section changed
             const relativePath = path.relative(BASE_DIRS.data, filePath);
             const section = relativePath.split(path.sep)[0];
-            
+
             if (SECTIONS.includes(section)) {
                 clearTimeout(debounceTimers[section]);
                 debounceTimers[section] = setTimeout(() => {

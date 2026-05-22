@@ -102,10 +102,19 @@ document.addEventListener('DOMContentLoaded', () => {
         initData();
     });
 
+    const rebuildDbBtn = document.getElementById('rebuildDbBtn');
+    if (rebuildDbBtn) {
+        rebuildDbBtn.addEventListener('click', () => {
+            if (rebuildDbBtn.classList.contains('loading')) return;
+            triggerRebuild(false);
+        });
+    }
+
     // Función para solicitar al servidor que regenere el índice de búsqueda (JSON optimizado)
     async function triggerRebuild(skipConfirm = false) {
         if (!skipConfirm && !confirm("Esto procesará todos los archivos en el servidor. ¿Continuar?")) return;
 
+        if (rebuildDbBtn) rebuildDbBtn.classList.add('loading');
         resultCount.textContent = 'Reconstruyendo índice de búsqueda...';
         
         try {
@@ -113,11 +122,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (data.success) {
                 resultCount.textContent = `¡Hecho! ${data.count} registros optimizados.`;
+                
+                try {
+                    const notesResp = await fetch(`/api/notes?section=${currentSection}`);
+                    recordNotes = await notesResp.json();
+                    searchWorker.postMessage({ type: 'LOAD_NOTES', payload: recordNotes });
+                } catch (e) {
+                    console.error("Error al recargar notas tras reconstruir DB:", e);
+                }
+                
                 // Notifica al Worker que cargue el nuevo archivo JSON generado
                 searchWorker.postMessage({ type: 'LOAD_JSON', payload: { url: `/data_index_${currentSection}.json` } });
             }
         } catch (err) {
             resultCount.textContent = 'Error al optimizar.';
+        } finally {
+            if (rebuildDbBtn) rebuildDbBtn.classList.remove('loading');
         }
     }
 
@@ -479,6 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const formData = new FormData();
+                formData.append('id', id);
                 formData.append('file', file);
 
                 // El servidor procesa el archivo y extrae los campos clave
@@ -556,8 +577,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Lógica del Gestor de Archivos Lateral
     if (manageFilesBtn) {
         manageFilesBtn.addEventListener('click', async () => {
-            fileManagerSidebar.classList.add('open');
-            await loadFileManagerFiles();
+            if (fileManagerSidebar.classList.contains('open')) {
+                fileManagerSidebar.classList.remove('open');
+            } else {
+                fileManagerSidebar.classList.add('open');
+                await loadFileManagerFiles();
+            }
         });
     }
 
@@ -569,6 +594,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let currentFileManagerCategory = 'all';
+
     async function loadFileManagerFiles() {
         if (!fileManagerBody) return;
         fileManagerBody.innerHTML = '<div class="spinner"></div>';
@@ -576,29 +603,76 @@ document.addEventListener('DOMContentLoaded', () => {
             const resp = await fetch(`/api/files?section=${currentSection}`);
             const data = await resp.json();
             
-            if (!data.files || data.files.length === 0) {
+            if ((!data.datos || data.datos.length === 0) && 
+                (!data.fotos || data.fotos.length === 0) && 
+                (!data.notas || data.notas.length === 0)) {
                 fileManagerBody.innerHTML = '<div class="empty-state"><p>No hay archivos en esta sección.</p></div>';
                 return;
             }
 
-            let html = '<div class="file-manager-list">';
-            data.files.forEach(file => {
-                html += `
-                    <div class="file-manager-item">
-                        <div class="file-name" title="${escapeHTML(file)}">${escapeHTML(file)}</div>
-                        <div class="file-manager-actions">
-                            <button class="action-btn download-btn" title="Descargar" onclick="window.open('/data/${currentSection}/${encodeURIComponent(file)}', '_blank')">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            </button>
-                            <button class="action-btn delete-btn" title="Borrar" onclick="window.deleteFile('${escapeHTML(file).replace(/'/g, "\\'")}')">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-            html += '</div>';
+            let html = `
+                <div class="file-manager-filter" style="margin-bottom: 1.5rem;">
+                    <select id="fileManagerCategorySelect" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(31, 40, 51, 0.8); border: 1px solid var(--card-border); color: var(--text-primary); outline: none;">
+                        <option value="all" ${currentFileManagerCategory === 'all' ? 'selected' : ''}>Todos los tipos de archivo</option>
+                        <option value="datos" ${currentFileManagerCategory === 'datos' ? 'selected' : ''}>Datos (Bases de datos)</option>
+                        <option value="fotos" ${currentFileManagerCategory === 'fotos' ? 'selected' : ''}>Fotos (Imágenes)</option>
+                        <option value="notas" ${currentFileManagerCategory === 'notas' ? 'selected' : ''}>Notas (Adjuntos)</option>
+                    </select>
+                </div>
+                <div id="fileManagerListContainer"></div>
+            `;
+            
             fileManagerBody.innerHTML = html;
+
+            const listContainer = document.getElementById('fileManagerListContainer');
+            const selectEl = document.getElementById('fileManagerCategorySelect');
+
+            const renderFiles = () => {
+                let listHtml = '';
+                
+                const renderCategory = (title, files, category, urlPrefix) => {
+                    if (!files || files.length === 0) return '';
+                    if (currentFileManagerCategory !== 'all' && currentFileManagerCategory !== category) return '';
+                    
+                    let catHtml = `<h3>${title}</h3><div class="file-manager-list" style="margin-bottom: 20px;">`;
+                    files.forEach(file => {
+                        const downloadUrl = category === 'notas' ? `/api/adjuntos/${currentSection}/${file}` : `/${urlPrefix}/${currentSection}/${encodeURIComponent(file)}`;
+                        catHtml += `
+                            <div class="file-manager-item">
+                                <div class="file-name" title="${escapeHTML(file)}">${escapeHTML(file)}</div>
+                                <div class="file-manager-actions">
+                                    <button class="action-btn download-btn" title="Descargar" onclick="window.open('${downloadUrl}', '_blank')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    </button>
+                                    <button class="action-btn delete-btn" title="Borrar" onclick="window.deleteFile('${escapeHTML(file).replace(/'/g, "\\'")}', '${category}')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    catHtml += '</div>';
+                    return catHtml;
+                };
+
+                listHtml += renderCategory('Datos (Bases de datos)', data.datos, 'datos', 'data');
+                listHtml += renderCategory('Fotos (Imágenes)', data.fotos, 'fotos', 'imagenes');
+                listHtml += renderCategory('Notas (Adjuntos)', data.notas, 'notas', 'api/adjuntos');
+
+                if (listHtml === '') {
+                    listHtml = '<div class="empty-state"><p>No hay archivos en esta categoría.</p></div>';
+                }
+                
+                listContainer.innerHTML = listHtml;
+            };
+
+            selectEl.addEventListener('change', (e) => {
+                currentFileManagerCategory = e.target.value;
+                renderFiles();
+            });
+
+            renderFiles();
+            
         } catch (err) {
             fileManagerBody.innerHTML = '<p>Error al cargar archivos.</p>';
             console.error(err);
@@ -637,18 +711,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    window.deleteFile = async (filename) => {
+    window.deleteFile = async (filename, category = 'datos') => {
         const isConfirmed = await customConfirm(`¿Estás seguro de que quieres borrar el archivo "${filename}"? Esta acción no se puede deshacer.`, 'Confirmar Borrado');
         if (!isConfirmed) return;
 
         try {
-            const res = await fetch(`/api/files/${encodeURIComponent(filename)}?section=${currentSection}`, {
+            const res = await fetch(`/api/files?section=${currentSection}&category=${category}&filepath=${encodeURIComponent(filename)}`, {
                 method: 'DELETE'
             });
             const data = await res.json();
             if (data.success) {
                 await loadFileManagerFiles();
-                triggerRebuild(true);
+                if (category === 'datos') {
+                    triggerRebuild(true);
+                } else if (category === 'notas' && data.recordId) {
+                    if (recordNotes[data.recordId]) {
+                        delete recordNotes[data.recordId];
+                        searchWorker.postMessage({ type: 'LOAD_NOTES', payload: recordNotes });
+                        if (typeof performSearch === 'function') performSearch(currentQuery);
+                    }
+                }
             } else {
                 alert("Error al borrar: " + data.error);
             }
