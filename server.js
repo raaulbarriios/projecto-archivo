@@ -84,7 +84,8 @@ const storage = multer.diskStorage({
         cb(null, dest);
     },
     filename: (req, file, cb) => {
-        cb(null, file.originalname);
+        const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        cb(null, decodedName);
     }
 });
 const upload = multer({ storage });
@@ -572,7 +573,8 @@ const attachmentUpload = multer({
             cb(null, dest);
         },
         filename: (req, file, cb) => {
-            cb(null, file.originalname);
+            const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+            cb(null, decodedName);
         }
     })
 });
