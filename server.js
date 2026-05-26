@@ -10,6 +10,10 @@ const AdmZip = require('adm-zip');
 const mammoth = require('mammoth');
 const chokidar = require('chokidar');
 const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+
+const JWT_SECRET = 'secreto_super_seguro_archivo_central_2026';
 
 const pool = new Pool({
     user: 'postgres',
@@ -38,6 +42,26 @@ async function initDB() {
                 note JSONB
             )
         `);
+        
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(20) NOT NULL
+            )
+        `);
+
+        // Seed default users if none exist
+        const userCount = await pool.query('SELECT COUNT(*) FROM users');
+        if (parseInt(userCount.rows[0].count) === 0) {
+            const adminHash = bcrypt.hashSync('admin', 10);
+            const userHash = bcrypt.hashSync('user', 10);
+            await pool.query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['admin', adminHash, 'admin']);
+            await pool.query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['user', userHash, 'user']);
+            console.log("Default users created: admin/admin and user/user");
+        }
+
         console.log("PostgreSQL database tables initialized.");
     } catch (err) {
         console.error("Error initializing database:", err);
@@ -50,6 +74,118 @@ const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Auth Middleware
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token == null) return res.status(401).json({ error: "Token requerido" });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: "Token inválido" });
+        req.user = user;
+        next();
+    });
+}
+
+function requireAdmin(req, res, next) {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ error: "Acceso denegado. Se requiere rol de administrador." });
+    }
+}
+
+// Login Endpoint
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: "Usuario no encontrado" });
+        }
+        
+        const user = result.rows[0];
+        const validPassword = bcrypt.compareSync(password, user.password);
+        
+        if (!validPassword) {
+            return res.status(401).json({ error: "Contraseña incorrecta" });
+        }
+        
+        const token = jwt.sign({ username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token, role: user.role, username: user.username });
+    } catch (err) {
+        console.error("Login error:", err);
+        res.status(500).json({ error: "Error en el servidor" });
+    }
+});
+
+// Protect all /api routes below this point
+app.use('/api', authenticateToken);
+
+// Require admin for any modification route (POST, DELETE, PUT) under /api
+app.use('/api', (req, res, next) => {
+    if (req.method !== 'GET') {
+        return requireAdmin(req, res, next);
+    }
+    next();
+});
+
+// --- User Management Routes ---
+app.get('/api/users', requireAdmin, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, username, role FROM users ORDER BY id ASC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error obteniendo usuarios" });
+    }
+});
+
+app.post('/api/users', async (req, res) => {
+    try {
+        const { username, password, role } = req.body;
+        if (!username || !password || !role) return res.status(400).json({ error: "Faltan datos" });
+        const hash = bcrypt.hashSync(password, 10);
+        await pool.query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', [username, hash, role]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        if (err.code === '23505') return res.status(400).json({ error: "El usuario ya existe" });
+        res.status(500).json({ error: "Error creando usuario" });
+    }
+});
+
+app.put('/api/users/:username/password', async (req, res) => {
+    try {
+        const { username } = req.params;
+        const { password } = req.body;
+        if (!password) return res.status(400).json({ error: "Se requiere contraseña nueva" });
+        const hash = bcrypt.hashSync(password, 10);
+        const result = await pool.query('UPDATE users SET password = $1 WHERE username = $2', [hash, username]);
+        if (result.rowCount === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error actualizando contraseña" });
+    }
+});
+
+app.delete('/api/users/:username', async (req, res) => {
+    try {
+        const { username } = req.params;
+        if (username === 'admin') {
+            return res.status(400).json({ error: "No se puede borrar al administrador principal" });
+        }
+        const result = await pool.query('DELETE FROM users WHERE username = $1', [username]);
+        if (result.rowCount === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error borrando usuario" });
+    }
+});
 
 const SECTIONS = ['ahpna', 'urbanismo', 'ama'];
 

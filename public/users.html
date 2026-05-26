@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios - Archivo Central</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="auth.js"></script>
+    <script>
+        // Protección extra: solo administradores pueden ver esta página
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('authRole') !== 'admin') {
+                window.location.href = 'index.html';
+            }
+        });
+    </script>
+    
+    <style>
+        .container { max-width: 1000px; margin: 0 auto; padding: 4rem 2rem; }
+        .users-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        .users-header h1 { font-family: 'Outfit', sans-serif; font-size: 2.5rem; color: var(--text-primary); }
+        .back-btn { text-decoration: none; color: var(--text-secondary); background: rgba(0,0,0,0.05); padding: 0.5rem 1rem; border-radius: 8px; transition: var(--transition); font-weight: 600; }
+        .back-btn:hover { background: rgba(0,0,0,0.1); color: var(--text-primary); }
+        
+        .users-grid { display: grid; grid-template-columns: 1fr 350px; gap: 2rem; }
+        @media (max-width: 768px) { .users-grid { grid-template-columns: 1fr; } }
+        
+        .panel { background: rgba(255,255,255,0.85); border: 1px solid var(--card-border); border-radius: 16px; padding: 2rem; box-shadow: var(--glass-shadow); }
+        .panel h2 { font-family: 'Outfit', sans-serif; margin-bottom: 1.5rem; color: var(--accent); }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.05); }
+        th { font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; }
+        td { font-weight: 500; }
+        
+        .role-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+        .role-admin { background: rgba(102, 252, 241, 0.2); color: var(--accent-dark); }
+        .role-user { background: rgba(0, 0, 0, 0.05); color: var(--text-secondary); }
+        
+        .action-link { color: var(--accent); cursor: pointer; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; font-size: 0.85rem; }
+        .action-link:hover { color: var(--accent-dark); }
+        
+        .form-group { margin-bottom: 1.2rem; }
+        .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; }
+        .form-group input, .form-group select { width: 100%; padding: 0.8rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; font-size: 0.95rem; background: rgba(0,0,0,0.02); }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); background: rgba(102, 252, 241, 0.05); }
+        
+        .btn-submit { width: 100%; background: var(--accent); color: white; border: none; padding: 0.8rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+        .btn-submit:hover { background: var(--accent-dark); }
+        
+        /* Modal simple para cambiar pass */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: var(--transition); z-index: 1000; }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+        .modal-content { background: white; padding: 2rem; border-radius: 16px; width: 90%; max-width: 400px; text-align: center; transform: translateY(20px); transition: var(--transition); }
+        .modal-overlay.open .modal-content { transform: translateY(0); }
+        
+        .msg { margin-top: 1rem; font-size: 0.9rem; font-weight: 600; display: none; padding: 0.5rem; border-radius: 8px; }
+        .msg.success { background: rgba(47, 133, 90, 0.1); color: #2f855a; display: block; }
+        .msg.error { background: rgba(229, 62, 62, 0.1); color: #e53e3e; display: block; }
+    </style>
+</head>
+<body>
+    <div class="background-elements">
+        <div class="glow-orb" id="orb1"></div>
+        <div class="glow-orb" id="orb2"></div>
+    </div>
+
+    <div class="container">
+        <div class="users-header">
+            <h1>Gestión de Usuarios</h1>
+            <a href="index.html" class="back-btn">← Volver al Hub</a>
+        </div>
+        
+        <div class="users-grid">
+            <div class="panel">
+                <h2>Usuarios Actuales</h2>
+                <table id="usersTable">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Llenado dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="panel">
+                <h2>Añadir Nuevo Usuario</h2>
+                <form id="addUserForm">
+                    <div class="form-group">
+                        <label for="newUsername">Nombre de Usuario</label>
+                        <input type="text" id="newUsername" required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">Contraseña</label>
+                        <input type="password" id="newPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newRole">Rol</label>
+                        <select id="newRole" required>
+                            <option value="user">Usuario Normal (Solo lectura)</option>
+                            <option value="admin">Administrador (Total)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-submit">Crear Usuario</button>
+                    <div id="addMsg" class="msg"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Cambiar Contraseña -->
+    <div id="passModal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 style="font-family:'Outfit'; margin-bottom: 0.5rem; color: var(--text-primary);">Cambiar Contraseña</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Usuario: <strong id="passUsernameDisplay"></strong></p>
+            
+            <form id="changePassForm" style="text-align: left;">
+                <input type="hidden" id="passUsername">
+                <div class="form-group">
+                    <label>Nueva Contraseña</label>
+                    <input type="password" id="newPassValue" required>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                    <button type="button" class="btn-submit" style="background: rgba(0,0,0,0.1); color: var(--text-primary);" onclick="document.getElementById('passModal').classList.remove('open')">Cancelar</button>
+                    <button type="submit" class="btn-submit">Guardar</button>
+                </div>
+                <div id="passMsg" class="msg"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function loadUsers() {
+            try {
+                const res = await fetch('/api/users');
+                if (res.ok) {
+                    const users = await res.json();
+                    const tbody = document.querySelector('#usersTable tbody');
+                    tbody.innerHTML = '';
+                    users.forEach(u => {
+                        const tr = document.createElement('tr');
+                        const roleClass = u.role === 'admin' ? 'role-admin' : 'role-user';
+                        const roleName = u.role === 'admin' ? 'Administrador' : 'Usuario Normal';
+                        
+                        let deleteLink = '';
+                        if (u.username !== 'admin') {
+                            deleteLink = ` | <span class="action-link" style="color:#e53e3e;" onclick="deleteUser('${u.username}')">Borrar</span>`;
+                        }
+
+                        tr.innerHTML = `
+                            <td>${u.username}</td>
+                            <td><span class="role-badge ${roleClass}">${roleName}</span></td>
+                            <td>
+                                <span class="action-link" onclick="openPassModal('${u.username}')">Cambiar Contraseña</span>
+                                ${deleteLink}
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                console.error("Error loading users", err);
+            }
+        }
+        
+        function openPassModal(username) {
+            document.getElementById('passUsernameDisplay').textContent = username;
+            document.getElementById('passUsername').value = username;
+            document.getElementById('newPassValue').value = '';
+            document.getElementById('passMsg').className = 'msg';
+            document.getElementById('passModal').classList.add('open');
+        }
+        
+        document.getElementById('changePassForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('passUsername').value;
+            const password = document.getElementById('newPassValue').value;
+            const msgEl = document.getElementById('passMsg');
+            
+            try {
+                const res = await fetch(`/api/users/${username}/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    msgEl.textContent = 'Contraseña actualizada correctamente';
+                    msgEl.className = 'msg success';
+                    setTimeout(() => document.getElementById('passModal').classList.remove('open'), 1500);
+                } else {
+                    msgEl.textContent = data.error || 'Error al actualizar';
+                    msgEl.className = 'msg error';
+                }
+            } catch (err) {
+                msgEl.textContent = 'Error de conexión';
+                msgEl.className = 'msg error';
+            }
+        });
+        
+        document.getElementById('addUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            const role = document.getElementById('newRole').value;
+            const msgEl = document.getElementById('addMsg');
+            
+            try {
+                const res = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, role })
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    msgEl.textContent = 'Usuario creado con éxito';
+                    msgEl.className = 'msg success';
+                    document.getElementById('addUserForm').reset();
+                    loadUsers(); // refresh table
+                } else {
+                    msgEl.textContent = data.error || 'Error al crear usuario';
+                    msgEl.className = 'msg error';
+                }
+            } catch (err) {
+                msgEl.textContent = 'Error de conexión';
+                msgEl.className = 'msg error';
+            }
+        });
+        
+        async function deleteUser(username) {
+            if (!confirm(`¿Estás seguro de que deseas borrar permanentemente al usuario '${username}'?`)) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/users/${username}`, {
+                    method: 'DELETE'
+                });
+                
+                if (res.ok) {
+                    loadUsers(); // refresh table
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Error al borrar usuario');
+                }
+            } catch (err) {
+                alert('Error de conexión al borrar');
+            }
+        }
+        
+        // Cargar usuarios al iniciar
+        loadUsers();
+    </script>
+</body>
+</html>

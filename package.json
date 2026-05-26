@@ -11,9 +11,11 @@
   "license": "ISC",
   "dependencies": {
     "adm-zip": "^0.5.17",
+    "bcryptjs": "^3.0.3",
     "chokidar": "^5.0.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.12.0",
     "mdb-reader": "^1.2.1",
     "multer": "^2.1.1",

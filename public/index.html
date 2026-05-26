@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="style.css">
+    <script src="auth.js"></script>
     <style>
         /* Estilos específicos para la página de inicio */
         body {
@@ -18,13 +19,13 @@
             justify-content: center;
             min-height: 100vh;
             text-align: center;
-            background: radial-gradient(circle at center, #1f2833 0%, #0b0c10 100%);
+            background: radial-gradient(circle at center, #f8fafc 0%, #e2e8f0 100%);
         }
 
         .hub-title {
             font-size: 3.5rem;
             margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #fff, var(--text-secondary));
+            background: linear-gradient(135deg, #1a202c, var(--text-secondary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -44,8 +45,8 @@
         }
 
         .hub-card {
-            background: rgba(31, 40, 51, 0.6);
-            border: 1px solid var(--card-border);
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(0, 0, 0, 0.05);
             border-radius: 20px;
             padding: 3rem 2rem;
             width: 280px;
@@ -55,29 +56,29 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
             position: relative;
             overflow: hidden;
         }
 
         .hub-card:hover {
             transform: translateY(-10px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.1);
             border-color: currentColor;
         }
 
         /* Colores específicos para los hover de cada tarjeta */
         .hub-card.ahpna:hover {
-            color: #66fcf1;
-            box-shadow: 0 15px 40px rgba(102, 252, 241, 0.2);
+            color: #2b6cb0;
+            box-shadow: 0 15px 40px rgba(43, 108, 176, 0.15);
         }
         .hub-card.urbanismo:hover {
-            color: #a8e6cf;
-            box-shadow: 0 15px 40px rgba(168, 230, 207, 0.2);
+            color: #2f855a;
+            box-shadow: 0 15px 40px rgba(47, 133, 90, 0.15);
         }
         .hub-card.ama:hover {
-            color: #ff8b94;
-            box-shadow: 0 15px 40px rgba(255, 139, 148, 0.2);
+            color: #c53030;
+            box-shadow: 0 15px 40px rgba(197, 48, 48, 0.15);
         }
 
         .hub-icon {
@@ -125,6 +126,12 @@
             <div class="hub-icon">🏛️</div>
             <h2>AMA</h2>
             <p>Archivo Municipal de Algeciras</p>
+        </a>
+
+        <a href="users.html" class="hub-card admin-only-card" style="border: 1px solid #ecc94b; background: rgba(255,255,255,0.95);">
+            <div class="hub-icon">👥</div>
+            <h2 style="color: #d69e2e;">Gestión Usuarios</h2>
+            <p style="color: #718096;">Administrar contraseñas y permisos</p>
         </a>
     </div>
 </body>

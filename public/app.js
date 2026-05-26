@@ -612,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = `
                 <div class="file-manager-filter" style="margin-bottom: 1.5rem;">
-                    <select id="fileManagerCategorySelect" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(31, 40, 51, 0.8); border: 1px solid var(--card-border); color: var(--text-primary); outline: none;">
+                    <select id="fileManagerCategorySelect" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(255, 255, 255, 0.9); border: 1px solid var(--card-border); color: var(--text-primary); outline: none;">
                         <option value="all" ${currentFileManagerCategory === 'all' ? 'selected' : ''}>Todos los tipos de archivo</option>
                         <option value="datos" ${currentFileManagerCategory === 'datos' ? 'selected' : ''}>Datos (Bases de datos)</option>
                         <option value="fotos" ${currentFileManagerCategory === 'fotos' ? 'selected' : ''}>Fotos (Imágenes)</option>
