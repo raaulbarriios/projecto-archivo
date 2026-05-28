@@ -16,7 +16,7 @@ const bcrypt = require('bcryptjs');
 const JWT_SECRET = 'secreto_super_seguro_archivo_central_2026';
 
 const pool = new Pool({
-    user: 'postgres',
+    user: 'bd',
     host: 'localhost',
     database: 'postgres',
     password: '1234',
