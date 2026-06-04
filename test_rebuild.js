@@ -26,7 +26,8 @@ try {
         if (fs.existsSync(dataPath)) fs.renameSync(dataPath, path.join(dbFolderPath, 'db.data'));
         if (fs.existsSync(backupPath)) fs.renameSync(backupPath, path.join(dbFolderPath, 'db.backup'));
         
-        const javaCmd = `java -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -cp "lib/hsqldb.jar;." ReadOdb "${path.join(dbFolderPath, 'db')}"`;
+        const cpSeparator = process.platform === 'win32' ? ';' : ':';
+        const javaCmd = `java -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -cp "lib/hsqldb.jar${cpSeparator}." ReadOdb "${path.join(dbFolderPath, 'db')}"`;
         console.log("Running:", javaCmd);
         const rawBuffer = execSync(javaCmd, { cwd: __dirname, encoding: 'buffer', maxBuffer: 1024 * 1024 * 50 });
         const output = rawBuffer.toString('utf8');
