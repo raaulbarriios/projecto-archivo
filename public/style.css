@@ -1,20 +1,36 @@
 :root {
     --bg-color: #f8fafc;
-    --text-primary: #1a202c;
-    --text-secondary: #4a5568;
-    --accent: #66fcf1;
-    --accent-dark: #45a29e;
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
+    --accent-rgb: 79, 209, 197; /* Default teal */
+    --accent: rgb(var(--accent-rgb));
+    --accent-dark: #0f766e;
     --card-bg: rgba(255, 255, 255, 0.85);
-    --card-border: rgba(102, 252, 241, 0.1);
-    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
-    --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    --card-border: rgba(var(--accent-rgb), 0.15);
+    --glass-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
+    --transition: all 0.2s ease-in-out;
 }
 
-body.theme-ahpna { --accent: #2b6cb0; --accent-dark: #1a365d; --card-border: rgba(43, 108, 176, 0.2); }
+body.theme-ahpna {
+    --accent-rgb: 37, 99, 235; /* Blue */
+    --accent: rgb(var(--accent-rgb));
+    --accent-dark: #1d4ed8;
+    --card-border: rgba(var(--accent-rgb), 0.15);
+}
 
-body.theme-urbanismo { --accent: #2f855a; --accent-dark: #1c4532; --card-border: rgba(47, 133, 90, 0.2); }
+body.theme-urbanismo {
+    --accent-rgb: 22, 163, 74; /* Green */
+    --accent: rgb(var(--accent-rgb));
+    --accent-dark: #15803d;
+    --card-border: rgba(var(--accent-rgb), 0.15);
+}
 
-body.theme-ama { --accent: #c53030; --accent-dark: #742a2a; --card-border: rgba(197, 48, 48, 0.2); }
+body.theme-ama {
+    --accent-rgb: 220, 38, 38; /* Red */
+    --accent: rgb(var(--accent-rgb));
+    --accent-dark: #b91c1c;
+    --card-border: rgba(var(--accent-rgb), 0.15);
+}
 
 * {
     margin: 0;
@@ -416,8 +432,8 @@ header p {
 
 .record-card:hover {
     transform: translateY(-5px);
-    border-color: rgba(102, 252, 241, 0.3);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border-color: rgba(var(--accent-rgb), 0.4);
+    box-shadow: 0 12px 30px rgba(var(--accent-rgb), 0.12);
 }
 
 .card-header {
@@ -434,8 +450,8 @@ header p {
     align-items: center;
     gap: 0.5rem;
     font-size: 0.85rem;
-    color: var(--accent);
-    background: rgba(102, 252, 241, 0.1);
+    color: var(--accent-dark);
+    background: rgba(var(--accent-rgb), 0.1);
     padding: 0.3rem 0.8rem;
     border-radius: 20px;
     text-transform: uppercase;
@@ -471,10 +487,10 @@ header p {
 }
 
 .data-link {
-    color: var(--accent);
+    color: var(--accent-dark);
     text-decoration: none;
     font-weight: 600;
-    background: rgba(102, 252, 241, 0.1);
+    background: rgba(var(--accent-rgb), 0.1);
     padding: 4px 10px;
     border-radius: 6px;
     transition: var(--transition);
@@ -514,9 +530,9 @@ header p {
 }
 
 /* Match highlighting */
-.highlight {
-    background-color: rgba(102, 252, 241, 0.2);
-    color: var(--accent);
+.highlight, mark {
+    background-color: rgba(245, 158, 11, 0.18); /* Soft amber */
+    color: #b45309; /* Deep contrast brown/gold */
     border-radius: 4px;
     padding: 0 3px;
     font-weight: 600;
@@ -976,10 +992,13 @@ header p {
 
 /* Specific Browser Compatibility */
 @supports (-webkit-backdrop-filter: none) or (backdrop-filter: none) {
-    .glass, .record-card, .sidebar, .search-box input, .advanced-panel {
-        background: rgba(0, 0, 0, 0.05);
+    .glass, .record-card, .sidebar, .advanced-panel {
+        background: rgba(255, 255, 255, 0.65);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
+    }
+    .search-box input {
+        background: transparent;
     }
 }
 
