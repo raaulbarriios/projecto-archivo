@@ -340,8 +340,19 @@ function extractDataFromSheet(sheet) {
     const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "" });
     if (rows.length === 0) return [];
 
+    let maxFilled = 0;
+    const filledCounts = rows.map(row => {
+        const count = row.filter(cell => String(cell).trim() !== "").length;
+        if (count > maxFilled) maxFilled = count;
+        return count;
+    });
+
+    if (maxFilled === 0) return [];
+
+    const threshold = Math.min(maxFilled, Math.max(2, Math.floor(maxFilled * 0.25)));
+
     let firstDataRow = 0;
-    while (firstDataRow < rows.length && rows[firstDataRow].every(cell => String(cell).trim() === "")) {
+    while (firstDataRow < rows.length && filledCounts[firstDataRow] < threshold) {
         firstDataRow++;
     }
     if (firstDataRow >= rows.length) return [];
