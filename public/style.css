@@ -2,9 +2,9 @@
     --bg-color: #f8fafc;
     --text-primary: #1e293b;
     --text-secondary: #475569;
-    --accent-rgb: 79, 209, 197; /* Default teal */
+    --accent-rgb: 79, 70, 229; /* Soft Indigo */
     --accent: rgb(var(--accent-rgb));
-    --accent-dark: #0f766e;
+    --accent-dark: #3730a3;
     --card-bg: rgba(255, 255, 255, 0.85);
     --card-border: rgba(var(--accent-rgb), 0.15);
     --glass-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
@@ -222,16 +222,17 @@ header p {
 }
 
 .refresh-btn {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid var(--card-border);
-    color: var(--accent);
-    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    color: var(--accent-dark);
+    padding: 0.5rem 1.2rem;
     border-radius: 8px;
     cursor: pointer;
     font-family: inherit;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    font-weight: 600;
     transition: var(--transition);
 }
 
@@ -241,21 +242,11 @@ header p {
 }
 
 .refresh-btn:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: #1a202c;
-    transform: translateY(-2px);
-}
-
-#refreshBtn:hover {
-    background: rgba(102, 252, 241, 0.1);
+    background: rgba(var(--accent-rgb), 0.06);
     border-color: var(--accent);
-    box-shadow: 0 4px 15px rgba(102, 252, 241, 0.2);
-}
-
-#importBtn:hover {
-    background: rgba(183, 148, 244, 0.1);
-    border-color: #b794f4;
-    box-shadow: 0 4px 15px rgba(183, 148, 244, 0.2);
+    color: var(--accent-dark);
+    box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.12);
+    transform: translateY(-2px);
 }
 
 .refresh-btn.loading svg {

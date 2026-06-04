@@ -29,7 +29,7 @@
         @media (max-width: 768px) { .users-grid { grid-template-columns: 1fr; } }
         
         .panel { background: rgba(255,255,255,0.85); border: 1px solid var(--card-border); border-radius: 16px; padding: 2rem; box-shadow: var(--glass-shadow); }
-        .panel h2 { font-family: 'Outfit', sans-serif; margin-bottom: 1.5rem; color: var(--accent); }
+        .panel h2 { font-family: 'Outfit', sans-serif; margin-bottom: 1.5rem; color: var(--accent-dark); }
         
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.05); }
@@ -37,19 +37,19 @@
         td { font-weight: 500; }
         
         .role-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
-        .role-admin { background: rgba(102, 252, 241, 0.2); color: var(--accent-dark); }
+        .role-admin { background: rgba(var(--accent-rgb), 0.12); color: var(--accent-dark); }
         .role-user { background: rgba(0, 0, 0, 0.05); color: var(--text-secondary); }
         
-        .action-link { color: var(--accent); cursor: pointer; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; font-size: 0.85rem; }
-        .action-link:hover { color: var(--accent-dark); }
+        .action-link { color: var(--accent-dark); cursor: pointer; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; font-size: 0.85rem; }
+        .action-link:hover { color: var(--accent); }
         
         .form-group { margin-bottom: 1.2rem; }
         .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; }
         .form-group input, .form-group select { width: 100%; padding: 0.8rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: inherit; font-size: 0.95rem; background: rgba(0,0,0,0.02); }
-        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); background: rgba(102, 252, 241, 0.05); }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); background: rgba(var(--accent-rgb), 0.05); }
         
-        .btn-submit { width: 100%; background: var(--accent); color: white; border: none; padding: 0.8rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
-        .btn-submit:hover { background: var(--accent-dark); }
+        .btn-submit { width: 100%; background: var(--accent-dark); color: white; border: none; padding: 0.8rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+        .btn-submit:hover { background: var(--accent); }
         
         /* Modal simple para cambiar pass */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: var(--transition); z-index: 1000; }
