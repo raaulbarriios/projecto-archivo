@@ -13,21 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!window.location.pathname.endsWith('login.html')) {
         const logoutBtn = document.createElement('button');
         logoutBtn.textContent = 'Cerrar Sesión';
-        logoutBtn.style.padding = '0.5rem 1rem';
-        logoutBtn.style.background = 'rgba(244, 67, 54, 0.1)';
-        logoutBtn.style.color = '#f44336';
-        logoutBtn.style.border = '1px solid rgba(244, 67, 54, 0.3)';
-        logoutBtn.style.borderRadius = '8px';
-        logoutBtn.style.cursor = 'pointer';
-        logoutBtn.style.fontWeight = '600';
-        logoutBtn.style.transition = 'all 0.3s ease';
-
-        logoutBtn.onmouseover = () => {
-            logoutBtn.style.background = 'rgba(244, 67, 54, 0.2)';
-        };
-        logoutBtn.onmouseout = () => {
-            logoutBtn.style.background = 'rgba(244, 67, 54, 0.1)';
-        };
+        logoutBtn.className = 'top-nav-btn logout-btn';
 
         logoutBtn.onclick = () => {
             sessionStorage.removeItem('authToken');
@@ -38,7 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const nav = document.querySelector('.top-nav') || document.querySelector('header');
         if (nav && nav.classList.contains('top-nav')) {
-            logoutBtn.style.marginLeft = 'auto';
+            const isIndex = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('index');
+            if (!isIndex) {
+                logoutBtn.classList.add('logout-btn-auto-margin');
+            }
             nav.appendChild(logoutBtn);
         } else {
             // Si no hay top-nav (ej: en index.html), lo añadimos de forma absoluta

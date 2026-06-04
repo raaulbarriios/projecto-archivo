@@ -16,10 +16,20 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             min-height: 100vh;
             text-align: center;
             background: radial-gradient(circle at center, #f8fafc 0%, #e2e8f0 100%);
+        }
+
+        .hub-content {
+            margin: auto 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 1000px;
+            padding: 2rem;
+            box-sizing: border-box;
         }
 
         .hub-title {
@@ -98,11 +108,62 @@
             line-height: 1.5;
         }
 
+        .top-nav {
+            width: 100%;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 1.5rem 1.5rem 0 1.5rem;
+            box-sizing: border-box;
+            z-index: 100;
+            margin-bottom: 0;
+        }
+
+        /* Responsive adjustments for Hub */
+        @media (max-width: 768px) {
+            .hub-title {
+                font-size: 2.8rem;
+            }
+            .hub-subtitle {
+                margin-bottom: 2.5rem;
+            }
+            .hub-grid {
+                gap: 1.5rem;
+            }
+            .hub-card {
+                width: 100%;
+                max-width: 320px;
+                padding: 2rem 1.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hub-title {
+                font-size: 2.2rem;
+            }
+            .hub-subtitle {
+                font-size: 1.1rem;
+                margin-bottom: 2rem;
+            }
+            .top-nav {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+                padding: 1rem 1rem 0 1rem;
+            }
+            .top-nav-btn {
+                width: 100%;
+                margin-left: 0;
+                text-align: center;
+            }
+        }
+
     </style>
 </head>
 <body>
-    <div class="top-nav" style="position: absolute; top: 1.5rem; right: 1.5rem; display: flex; gap: 1rem; align-items: center; justify-content: flex-end; width: auto; z-index: 100; margin-bottom: 0;">
-        <a href="users.html" class="admin-only-card top-nav-admin-btn">Gestión Usuarios</a>
+    <div class="top-nav">
+        <a href="users.html" class="admin-only-card top-nav-btn top-nav-admin-btn">Gestión Usuarios</a>
     </div>
 
     <div class="background-effects">
@@ -110,28 +171,29 @@
         <div class="glow-orb" style="bottom: 20%; right: 30%; background: radial-gradient(circle, rgba(168, 230, 207, 0.1) 0%, transparent 70%);"></div>
     </div>
 
-    <h1 class="hub-title">Archivo Central</h1>
-    <p class="hub-subtitle">Seleccione la base de datos que desea consultar</p>
+    <div class="hub-content">
+        <h1 class="hub-title">Archivo Central</h1>
+        <p class="hub-subtitle">Seleccione la base de datos que desea consultar</p>
 
-    <div class="hub-grid">
-        <a href="ahpna.html" class="hub-card ahpna">
-            <div class="hub-icon">📜</div>
-            <h2>AHPNA</h2>
-            <p>Archivo Histórico de Protocolos Notariales</p>
-        </a>
+        <div class="hub-grid">
+            <a href="ahpna.html" class="hub-card ahpna">
+                <div class="hub-icon">📜</div>
+                <h2>AHPNA</h2>
+                <p>Archivo Histórico de Protocolos Notariales</p>
+            </a>
 
-        <a href="urbanismo.html" class="hub-card urbanismo">
-            <div class="hub-icon">🏗️</div>
-            <h2>Urbanismo</h2>
-            <p>Base de datos de expedientes y planeamiento urbano</p>
-        </a>
+            <a href="urbanismo.html" class="hub-card urbanismo">
+                <div class="hub-icon">🏗️</div>
+                <h2>Urbanismo</h2>
+                <p>Base de datos de expedientes y planeamiento urbano</p>
+            </a>
 
-        <a href="ama.html" class="hub-card ama">
-            <div class="hub-icon">🏛️</div>
-            <h2>AMA</h2>
-            <p>Archivo Municipal de Algeciras</p>
-        </a>
-
+            <a href="ama.html" class="hub-card ama">
+                <div class="hub-icon">🏛️</div>
+                <h2>AMA</h2>
+                <p>Archivo Municipal de Algeciras</p>
+            </a>
+        </div>
     </div>
 </body>
 </html>
