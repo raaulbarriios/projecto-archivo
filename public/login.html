@@ -138,7 +138,7 @@
     <script src="auth.js"></script>
     <script>
         // Si ya hay token, ir a inicio
-        if (localStorage.getItem('authToken')) {
+        if (sessionStorage.getItem('authToken')) {
             window.location.href = 'index.html';
         }
 
@@ -165,9 +165,9 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    localStorage.setItem('authToken', data.token);
-                    localStorage.setItem('authRole', data.role);
-                    localStorage.setItem('authUsername', data.username);
+                    sessionStorage.setItem('authToken', data.token);
+                    sessionStorage.setItem('authRole', data.role);
+                    sessionStorage.setItem('authUsername', data.username);
                     window.location.href = 'index.html';
                 } else {
                     throw new Error(data.error || 'Error de inicio de sesión');

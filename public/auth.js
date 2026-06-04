@@ -2,7 +2,7 @@
 
 // This file must be loaded before any other script on protected pages.
 document.addEventListener('DOMContentLoaded', () => {
-    const token = localStorage.getItem('authToken');
+    const token = sessionStorage.getItem('authToken');
     
     // Si no estamos en la página de login y no hay token, redirigir
     if (!window.location.pathname.endsWith('login.html') && !token) {
@@ -30,9 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         logoutBtn.onclick = () => {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('authRole');
-            localStorage.removeItem('authUsername');
+            sessionStorage.removeItem('authToken');
+            sessionStorage.removeItem('authRole');
+            sessionStorage.removeItem('authUsername');
             window.location.href = 'login.html';
         };
 
@@ -65,13 +65,13 @@ window.fetch = async function() {
         if(config.headers === undefined) {
             config.headers = {};
         }
-        config.headers['Authorization'] = `Bearer ${localStorage.getItem('authToken')}`;
+        config.headers['Authorization'] = `Bearer ${sessionStorage.getItem('authToken')}`;
     }
     const response = await originalFetch(resource, config);
     
     // Si el servidor devuelve 401 Unauthorized o 403 Forbidden y no estamos en login, redirigir
     if (response.status === 401 && !window.location.pathname.endsWith('login.html')) {
-        localStorage.removeItem('authToken');
+        sessionStorage.removeItem('authToken');
         window.location.href = 'login.html';
     }
     
@@ -79,11 +79,11 @@ window.fetch = async function() {
 };
 
 function getUserRole() {
-    return localStorage.getItem('authRole') || 'user';
+    return sessionStorage.getItem('authRole') || 'user';
 }
 
 function getUsername() {
-    return localStorage.getItem('authUsername') || 'Usuario';
+    return sessionStorage.getItem('authUsername') || 'Usuario';
 }
 
 function isAdmin() {

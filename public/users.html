@@ -12,7 +12,7 @@
     <script>
         // Protección extra: solo administradores pueden ver esta página
         document.addEventListener('DOMContentLoaded', () => {
-            if (localStorage.getItem('authRole') !== 'admin') {
+            if (sessionStorage.getItem('authRole') !== 'admin') {
                 window.location.href = 'index.html';
             }
         });
