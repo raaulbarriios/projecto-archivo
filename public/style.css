@@ -109,6 +109,7 @@ header h1 {
     margin-bottom: 0.5rem;
     background: linear-gradient(90deg, #1a202c, var(--accent));
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -1006,7 +1007,7 @@ header p {
     display: flex;
 }
 
-.top-nav-btn, .back-link {
+.top-nav-btn {
     padding: 0.5rem 1rem;
     font-size: 0.95rem;
     font-weight: 600;
@@ -1024,6 +1025,20 @@ header p {
 }
 
 .back-link {
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    box-sizing: border-box;
+    height: 38px;
+    line-height: 1;
+    text-decoration: none;
     color: var(--accent);
     background: rgba(0, 0, 0, 0.05);
     border: 1px solid rgba(0, 0, 0, 0.1);
@@ -1035,13 +1050,13 @@ header p {
 }
 
 .top-nav-admin-btn {
-    background: rgba(var(--accent-rgb), 0.1);
+    background: rgb(var(--accent-rgb) / 10%);
     color: var(--accent-dark);
-    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    border: 1px solid rgb(var(--accent-rgb) / 30%);
 }
 
 .top-nav-admin-btn:hover {
-    background: rgba(var(--accent-rgb), 0.2);
+    background: rgb(var(--accent-rgb) / 20%);
 }
 
 .logout-btn {
